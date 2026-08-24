@@ -63,6 +63,16 @@ firebase emulators:start
 
 To load seed data into the emulator, create the documents manually via the Emulator UI at `http://localhost:4000` or write a one-time seed script using the Firebase Admin SDK pointed at the emulator.
 
+### Phase 2 — Fare calculator tests
+
+Run the offline test script from the repo root (no Firebase, no `npm install` required):
+
+```bash
+node scripts/testFare.js
+```
+
+Exits 0 if all tests pass. Tests all tier boundaries, night/highway surge boundaries, surge stacking, rounding, and input/config validation error paths.
+
 ### Documentation
 
 - `towing_dispatch_spec_v9.md` — Authoritative product and technical specification
