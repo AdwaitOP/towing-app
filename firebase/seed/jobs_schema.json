@@ -1,0 +1,222 @@
+{
+  "_comment": "Schema reference for the 'jobs' Firestore collection. NOT a live Firestore document. Use as the canonical field-name reference for all phases.",
+  "_spec_ref": "towing_dispatch_spec_v9.md §Firestore Collections, §Dispatch Logic, §Cancellation & Refund Policy",
+
+  "jobId": {
+    "type": "string",
+    "description": "Firestore auto-generated document ID. Also the key for the corresponding invoices/{jobId}.pdf in Storage.",
+    "writer": "Cloud Function (createJobAndQuote)",
+    "reader": "assigned driver, admin"
+  },
+
+  "customerPhone": {
+    "type": "string",
+    "description": "Customer's WhatsApp phone number in E.164 format. Used for all subsequent WhatsApp messages (payment link, invoice, status updates).",
+    "writer": "Cloud Function (createJobAndQuote)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "pickupCoords": {
+    "type": "map",
+    "fields": {
+      "lat": { "type": "number" },
+      "lng": { "type": "number" }
+    },
+    "description": "Customer's pickup location as sent via WhatsApp location pin.",
+    "writer": "Cloud Function (createJobAndQuote)",
+    "reader": "assigned driver, admin"
+  },
+
+  "destCoords": {
+    "type": "map",
+    "fields": {
+      "lat": { "type": "number" },
+      "lng": { "type": "number" }
+    },
+    "description": "Customer's destination location as sent via WhatsApp location pin.",
+    "writer": "Cloud Function (createJobAndQuote)",
+    "reader": "assigned driver, admin"
+  },
+
+  "vehicleType": {
+    "type": "string",
+    "description": "Customer's vehicle type (e.g. 'car', 'bike', 'suv'). Used for fare calculation and matching to appropriate truck type.",
+    "writer": "Cloud Function (createJobAndQuote)",
+    "reader": "assigned driver, admin"
+  },
+
+  "distanceKm": {
+    "type": "number",
+    "description": "Haversine straight-line distance in km from pickup to destination. Used for tier selection and Tier 3 commission formula. NOTE: this is the haversine distance, not the routed distance — the fare estimate applies road_curvature_factor on top.",
+    "writer": "Cloud Function (createJobAndQuote via fareCalculator)",
+    "reader": "assigned driver, admin"
+  },
+
+  "bookingFee": {
+    "type": "number",
+    "unit": "INR (integer paise recommended)",
+    "description": "Platform booking fee charged to the customer. Tier-based. This is the ONLY amount the platform collects from the customer — never the full tow fare.",
+    "writer": "Cloud Function (createJobAndQuote via fareCalculator)",
+    "reader": "assigned driver, admin"
+  },
+
+  "driverCommission": {
+    "type": "number",
+    "unit": "INR (integer paise recommended)",
+    "description": "Amount deducted from the driver's wallet on job acceptance. Tier-based; Tier 3 uses the formula: tier3_driver_commission_base + (per_km_overage_rate * (distanceKm - long_distance_limit_km)).",
+    "writer": "Cloud Function (createJobAndQuote via fareCalculator)",
+    "reader": "assigned driver, admin"
+  },
+
+  "estimatedFare": {
+    "type": "number",
+    "unit": "INR",
+    "description": "Estimated full tow fare — informational only, never collected by the platform. Shown to customer as 'collected directly by driver'. Calculated by fareCalculator using fare_formula.",
+    "writer": "Cloud Function (createJobAndQuote via fareCalculator)",
+    "reader": "assigned driver, customer (via WhatsApp), admin"
+  },
+
+  "status": {
+    "type": "string",
+    "enum": [
+      "pending_offer",
+      "offered",
+      "accepted",
+      "in_progress",
+      "completed",
+      "cancelled_customer",
+      "cancelled_driver",
+      "cancelled_system"
+    ],
+    "description": "Job state machine status. State transitions are enforced inside atomic Cloud Function transactions. The 'cancelled_system' status covers the no-driver-found case after the offer cascade is exhausted.",
+    "writer": "Cloud Function ONLY",
+    "reader": "assigned driver (current/offered), admin"
+  },
+
+  "offeredTo": {
+    "type": "string | null",
+    "description": "UID of the driver currently being offered this job. Used by the atomic accept-transaction to guard against double-assignment (checks job.status == 'offered' && job.offeredTo == driverId).",
+    "writer": "Cloud Function ONLY (dispatch)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "assignedDriver": {
+    "type": "string | null",
+    "default": null,
+    "description": "UID of the driver who accepted the job. Set atomically when the driver accepts. Null until accepted.",
+    "writer": "Cloud Function ONLY (accept transaction)",
+    "reader": "assigned driver, admin"
+  },
+
+  "channel": {
+    "type": "string",
+    "enum": ["whatsapp", "phone"],
+    "description": "How the booking was initiated. 'whatsapp' = customer self-served via WhatsApp flow. 'phone' = co-owner took the booking by phone via Admin Panel (Phase 6).",
+    "writer": "Cloud Function (createJobAndQuote — passed as parameter)",
+    "reader": "admin"
+  },
+
+  "createdByAdmin": {
+    "type": "string | null",
+    "default": null,
+    "description": "Admin UID of the co-owner who created this job via the Admin Panel phone-booking screen. Null for WhatsApp-originated bookings. Tagged on the job doc and also written to admin_actions.",
+    "writer": "Cloud Function (createJobAndQuote — passed as parameter)",
+    "reader": "admin"
+  },
+
+  "razorpayOrderId": {
+    "type": "string | null",
+    "default": null,
+    "description": "Razorpay order ID for the booking-fee payment. Created by the WhatsApp flow Cloud Function and sent to the customer as a UPI Intent link.",
+    "writer": "Cloud Function (messaging — Phase 3)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "razorpayPaymentId": {
+    "type": "string | null",
+    "default": null,
+    "description": "Razorpay payment ID received from the Razorpay webhook on payment success. Stored for refund operations (no-driver-found case).",
+    "writer": "Cloud Function (Razorpay webhook handler — Phase 3)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "invoiceNumber": {
+    "type": "string | null",
+    "default": null,
+    "description": "Sequential GST invoice number (e.g. 'TDS-0001'). Assigned via atomic Firestore transaction on business_config.invoiceNumberCounter. Null until the booking fee payment succeeds and the invoice is generated.",
+    "writer": "Cloud Function (invoicing — Phase 3)",
+    "reader": "admin"
+  },
+
+  "invoiceUrl": {
+    "type": "string | null",
+    "default": null,
+    "description": "Firebase Storage URL for the generated invoice PDF. Set once the PDF is uploaded. The PDF is also sent to the customer as a WhatsApp document — this URL is for admin reference.",
+    "writer": "Cloud Function (invoicing — Phase 3)",
+    "reader": "admin"
+  },
+
+  "offerExpiresAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "When the current offer to offeredTo expires. A Cloud Task is scheduled for this timestamp to trigger the offer-cascade logic. Never use in-function sleeps.",
+    "writer": "Cloud Function ONLY (dispatch)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "requestId": {
+    "type": "string",
+    "description": "Client-generated UUID sent by the driver app when tapping ACCEPT JOB. Used as an idempotency key so duplicate accept calls (network retries) are deduplicated. Checked against processed_requests/{requestId}.",
+    "writer": "Driver app (sent as parameter to accept Cloud Function)",
+    "reader": "Cloud Functions"
+  },
+
+  "cancelledBy": {
+    "type": "string | null",
+    "enum": ["customer", "driver", "system", null],
+    "default": null,
+    "description": "Who initiated the cancellation. 'system' = no driver found after cascade exhausted.",
+    "writer": "Cloud Function ONLY (cancellation handler)",
+    "reader": "admin"
+  },
+
+  "cancellationReason": {
+    "type": "string | null",
+    "default": null,
+    "description": "Free-text reason for cancellation, if provided.",
+    "writer": "Cloud Function ONLY",
+    "reader": "admin"
+  },
+
+  "refundedAmount": {
+    "type": "number | null",
+    "unit": "INR (integer paise recommended)",
+    "default": null,
+    "description": "Amount refunded to the customer (Razorpay Refunds API, no-driver-found case only) or to the driver's wallet (customer-cancel case). Set by the cancellation handler.",
+    "writer": "Cloud Function ONLY (cancellation handler)",
+    "reader": "admin"
+  },
+
+  "forfeitedAmount": {
+    "type": "number | null",
+    "unit": "INR (integer paise recommended)",
+    "default": null,
+    "description": "Commission amount forfeited by the driver under the cancellation penalty ramp. Pure wallet ledger operation — no Razorpay call.",
+    "writer": "Cloud Function ONLY (cancellation handler)",
+    "reader": "admin"
+  },
+
+  "createdAt": {
+    "type": "timestamp",
+    "description": "When the job document was first created by createJobAndQuote.",
+    "writer": "Cloud Function (createJobAndQuote)",
+    "reader": "assigned driver, admin"
+  },
+
+  "updatedAt": {
+    "type": "timestamp",
+    "description": "Last update timestamp. Set on every Cloud Function write to the job doc.",
+    "writer": "Cloud Function (any handler that touches this doc)",
+    "reader": "assigned driver, admin"
+  }
+}

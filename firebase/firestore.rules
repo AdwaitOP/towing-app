@@ -1,0 +1,272 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Firestore Security Rules — Towing Dispatch System
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Access model
+// ────────────
+// Collection                 | Driver (own)         | Driver (other) | Admin-claim | Cloud Function *
+// ─────────────────────────────────────────────────────────────────────────────
+// drivers/{driverId}         | R + allow-listed W   | deny           | R+W         | R+W (bypasses rules)
+// jobs/{jobId}               | R if offeredTo/assigned | deny        | R+W         | R+W
+// whatsapp_sessions/{phone}  | deny                 | deny           | deny        | R+W
+// processed_requests/{id}    | deny                 | deny           | deny        | R+W
+// pricing_config/{doc}       | R                    | R              | R           | R+W
+// usage_counters/{month}     | deny                 | deny           | deny        | R+W
+// admin_actions/{actionId}   | deny                 | deny           | R           | R+W
+// business_config/{doc}      | deny                 | deny           | R           | R+W
+//
+// * Cloud Functions use the Firebase Admin SDK (service account), which bypasses
+//   these rules entirely. "Cloud Function only" means we deny all client writes;
+//   the function enforces its own validation before any Admin SDK write.
+//
+// SECURITY MODEL: POSITIVE ALLOW-LIST & TYPE VALIDATION
+// ─────────────────────────────────────────────────────
+// Driver writes use a positive allow-list, NOT a deny-list.
+// Only fields explicitly enumerated below can be written by a driver.
+// Any field not in the allow-list — including fields that do not yet exist and
+// any speculative future fields — is automatically denied.
+//
+// All client-controlled fields are strictly type-validated:
+//   • textual fields: string
+//   • boolean toggles: bool
+//   • timestamps: timestamp
+//   • location: latlng (GeoPoint) when present
+//   • truckType: exact spec enum ['flatbed', 'tochan', 'hydraulic', 'crane']
+//
+// This means:
+//   • Financial fields (walletBalance, driverCommission, etc.) — denied
+//   • Verification fields (verificationStatus, verificationDocs, etc.) — denied
+//   • Ban/penalty fields (bannedUntil, strictMode, monthlyCancelCount) — denied
+//   • Admin/role fields (any future isAdmin, role, permissions, etc.) — denied
+//   • Any field not in DRIVER_CREATE_FIELDS or DRIVER_UPDATE_FIELDS — denied
+//
+// Admin-claim check: request.auth.token.admin == true
+// This is a Firebase custom claim set server-side by the Admin SDK bootstrap
+// script (Phase 6). It is NOT a field in the document.
+// ─────────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Shared helpers ──────────────────────────────────────────────────────
+
+    /// True when the caller is signed in via Firebase Auth.
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    /// True when the caller holds the admin custom claim.
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    /// True when the caller's UID matches the given driverId.
+    function isOwner(driverId) {
+      return isAuthenticated() && request.auth.uid == driverId;
+    }
+
+    // ── Driver validation and allow-list definitions ─────────────────────────
+    //
+    // DRIVER_CREATE_FIELDS: the complete set of fields a driver is allowed to
+    // supply when creating their profile document for the first time.
+    //
+    // Fields intentionally NOT in this set (Cloud Function / Admin SDK only):
+    //   walletBalance        — set by wallet top-up Cloud Function
+    //   verificationStatus   — set by admin approval/rejection Cloud Function
+    //   verificationDocs     — set by document-submission Cloud Function
+    //   rejectionReason      — set by admin rejection Cloud Function
+    //   bannedUntil          — set by cancellation-penalty Cloud Function
+    //   strictMode           — set by cancellation-penalty Cloud Function
+    //   monthlyCancelCount   — set by cancellation Cloud Function
+    //
+    // Note: 'location' is NOT in the create allow-list. Drivers set their
+    // location via periodic updates (Phase 5), not at profile creation time.
+    // The initial profile has no location; it is null by absence.
+
+    function driverCreateAllowedFields() {
+      return ['uid', 'name', 'phone', 'truckType', 'vehicleNumber',
+              'isOnDuty', 'createdAt', 'updatedAt'].toSet();
+    }
+
+    // DRIVER_UPDATE_FIELDS: the complete set of fields a driver is allowed to
+    // change after the document has been created.
+    //
+    // 'location' IS included here: the Flutter background location service
+    // (Phase 5) updates it continuously via the driver's own authenticated
+    // session. This is the only server-trusted dynamic field a driver writes
+    // after profile creation.
+    //
+    // 'uid', 'phone', 'createdAt' are NOT updatable by the driver. Those are
+    // set once at creation and are thereafter immutable from the client side.
+    // (Cloud Functions may update them if ever needed, since Admin SDK bypasses
+    // these rules.)
+
+    function driverUpdateAllowedFields() {
+      return ['name', 'truckType', 'vehicleNumber', 'isOnDuty',
+              'location', 'updatedAt'].toSet();
+    }
+
+    /// Validates truckType against the exact enum specified in towing_dispatch_spec_v9.md
+    function isValidTruckType(type) {
+      return type in ['flatbed', 'tochan', 'hydraulic', 'crane'];
+    }
+
+    /// On CREATE: validates types and values of all initial driver fields.
+    function driverCreateValidTypes(d, driverId) {
+      return d.uid == driverId
+          && d.uid is string
+          && d.name is string
+          && d.phone is string
+          && d.truckType is string && isValidTruckType(d.truckType)
+          && d.vehicleNumber is string
+          && d.isOnDuty is bool
+          && d.createdAt is timestamp
+          && d.updatedAt is timestamp
+          && (!('location' in d) || d.location == null || d.location is latlng);
+    }
+
+    /// On UPDATE: validates types and values of any client-modifiable fields in the document.
+    function driverUpdateValidTypes(d) {
+      return (!('name' in d) || d.name is string)
+          && (!('truckType' in d) || (d.truckType is string && isValidTruckType(d.truckType)))
+          && (!('vehicleNumber' in d) || d.vehicleNumber is string)
+          && (!('isOnDuty' in d) || d.isOnDuty is bool)
+          && (!('updatedAt' in d) || d.updatedAt is timestamp)
+          && (!('location' in d) || d.location == null || d.location is latlng);
+    }
+
+    /// On CREATE: every key in the incoming document must be in the allow-list.
+    /// A document supplying ANY key outside the allow-list is rejected.
+    function driverCreateIsAllowListed() {
+      return request.resource.data.keys().toSet()
+               .difference(driverCreateAllowedFields()).size() == 0;
+    }
+
+    /// On UPDATE: every key that changed must be in the update allow-list.
+    /// The diff covers both added and modified keys; removed keys are ignored
+    /// (a driver may delete their own writable fields, e.g. clearing 'location').
+    function driverUpdateIsAllowListed() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+               .toSet().difference(driverUpdateAllowedFields()).size() == 0;
+    }
+
+    // ── drivers ─────────────────────────────────────────────────────────────
+    //
+    // A driver may:
+    //   • read their own document
+    //   • create their own document (initial profile) — allow-listed fields and valid types only
+    //   • update their own document — allow-listed fields and valid types only
+    //
+    // Admins may read and write any driver document (for Phase 6 Admin Panel).
+    // All other access is denied.
+
+    match /drivers/{driverId} {
+      allow read: if isOwner(driverId) || isAdmin();
+
+      allow create: if isOwner(driverId)
+                    && driverCreateIsAllowListed()
+                    && driverCreateValidTypes(request.resource.data, driverId);
+
+      allow update: if (isOwner(driverId)
+                        && driverUpdateIsAllowListed()
+                        && driverUpdateValidTypes(request.resource.data))
+                    || isAdmin();
+
+      allow delete: if false; // drivers are never deleted from the client
+    }
+
+    // ── jobs ────────────────────────────────────────────────────────────────
+    //
+    // Drivers may read a job only if it is currently offered to them or
+    // assigned to them. All writes come from Cloud Functions (Admin SDK).
+    // Admins may read all jobs (for the Live Jobs view in Phase 6).
+
+    match /jobs/{jobId} {
+      allow read: if isAdmin()
+                  || (isAuthenticated()
+                      && (resource.data.offeredTo == request.auth.uid
+                          || resource.data.assignedDriver == request.auth.uid));
+
+      allow write: if false; // Cloud Function (Admin SDK) only
+    }
+
+    // ── whatsapp_sessions ───────────────────────────────────────────────────
+    //
+    // Customers interact via WhatsApp — they are not Firebase-authenticated.
+    // These documents are exclusively managed by the WhatsApp webhook Cloud
+    // Function using the Admin SDK. No client access at all.
+
+    match /whatsapp_sessions/{phoneNumber} {
+      allow read, write: if false;
+    }
+
+    // ── processed_requests ─────────────────────────────────────────────────
+    //
+    // Idempotency log. Written once by the webhook Cloud Function on first
+    // receipt of a WhatsApp message ID or requestId. Never read/written by
+    // any client.
+
+    match /processed_requests/{requestId} {
+      allow read, write: if false;
+    }
+
+    // ── pricing_config ──────────────────────────────────────────────────────
+    //
+    // Contains booking_tiers, fare_formula, and cancellation_policy.
+    // Drivers read this in the app (Phase 5) to show fare estimates and
+    // cancellation penalty previews. No client writes — ever. Config
+    // Editor (Phase 6) goes through a Cloud Function with type validation.
+
+    match /pricing_config/{document} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Cloud Function only (validated before Admin SDK write)
+    }
+
+    // ── usage_counters ──────────────────────────────────────────────────────
+    //
+    // One document per calendar month (key: "YYYY-MM"). Incremented by
+    // dispatch and messaging Cloud Functions. Never read or written by
+    // clients directly — the circuit-breaker logic lives server-side.
+
+    match /usage_counters/{month} {
+      allow read, write: if false;
+    }
+
+    // ── admin_actions ───────────────────────────────────────────────────────
+    //
+    // Append-only audit log. Every approval, rejection, forgiveness, config
+    // change, or phone-booking from the Admin Panel writes here. Admins may
+    // read for audit review; all writes come from Cloud Functions only.
+
+    match /admin_actions/{actionId} {
+      allow read: if isAdmin();
+      allow write: if false; // Cloud Function only
+    }
+
+    // ── business_config ─────────────────────────────────────────────────────
+    //
+    // Single document holding invoicing details (businessName, GSTIN,
+    // registeredAddress, invoiceNumberCounter, retention_policy).
+    // invoiceNumberCounter is incremented by an atomic Firestore transaction
+    // inside the invoicing Cloud Function — never touched by a client.
+    // Admins read this for the Config Editor and invoice generation context.
+
+    match /business_config/{document} {
+      allow read: if isAdmin();
+      allow write: if false; // Cloud Function only
+    }
+
+    // ── catch-all ────────────────────────────────────────────────────────────
+    //
+    // Deny everything not explicitly matched above. Firestore's default is
+    // deny, but this explicit rule makes the intent unambiguous and catches
+    // any new collections added before their rules are written.
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

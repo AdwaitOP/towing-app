@@ -1,0 +1,109 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Firebase Storage Security Rules — Towing Dispatch System
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Two storage paths are in use:
+//
+// 1. driver_verification/{driverId}/{filename}
+//    Stores: id.jpg, rc.jpg, selfie.jpg — in-app camera captures only
+//    (Storage filenames: id.jpg | rc.jpg | selfie.jpg; the Firestore field
+//    storing the selfie URL is named selfiePhotoUrl per the spec — these are
+//    two different things: filename on disk vs field name in Firestore doc)
+//
+//    Write (create/update): the driver whose UID matches {driverId}, restricted
+//      to exactly the three expected filenames, image MIME type, and ≤10 MB.
+//    Delete:  DENIED for drivers — once submitted, KYC files are retained for
+//      admin review and DPDP-retention lifecycle. Deletion is performed only by
+//      the Cloud Function (Admin SDK, which bypasses these rules).
+//    Read:   the owning driver OR any user with the admin:true custom claim.
+//    Public: NEVER. These are government-ID documents, sensitive personal data
+//            under India's DPDP Act. No public URLs are ever generated.
+//
+// Note on upload size: 10 MB per file. The spec does not specify a byte limit;
+// 10 MB is a conservative MVP ceiling consistent with high-quality phone JPEG
+// captures. This is an implementation decision, not a spec requirement.
+//
+// 2. invoices/{jobId}.pdf
+//    Stores: GST booking-fee invoice PDF generated server-side
+//    Write:  Cloud Function service account only (bypasses these rules)
+//    Delete: Cloud Function only (bypasses these rules)
+//    Read:   admin-claim users only.
+//            The customer copy is delivered as a WhatsApp document attachment
+//            by the same Cloud Function that generates the PDF — no customer
+//            ever needs to download directly from Storage.
+//    Public: NEVER.
+//
+// Everything else: catch-all deny.
+// ─────────────────────────────────────────────────────────────────────────────
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ── Shared helpers ──────────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    // ── Driver verification photos ──────────────────────────────────────────
+    //
+    // Path: driver_verification/{driverId}/{filename}
+    //
+    // Filename is restricted to exactly the three files the app uploads.
+    // Any other filename is rejected at the Storage rule level, preventing a
+    // modified client from using this path as arbitrary file storage.
+
+    match /driver_verification/{driverId}/{filename} {
+
+      // WRITE (create + update only — delete is explicitly excluded):
+      // • Caller must be authenticated
+      // • Caller's UID must match the driverId path segment (own files only)
+      // • Filename must be one of the three expected KYC files
+      // • File must be an image (MIME type check — defense-in-depth over app enforcement)
+      // • File must be ≤ 10 MB (conservative MVP limit — not a spec-defined value)
+      allow create, update: if isAuthenticated()
+                            && request.auth.uid == driverId
+                            && filename in ['id.jpg', 'rc.jpg', 'selfie.jpg']
+                            && request.resource.size <= 10 * 1024 * 1024
+                            && request.resource.contentType.matches('image/.*');
+
+      // DELETE: denied to drivers. KYC files are lifecycle-managed by the
+      // Cloud Function (Admin SDK) — specifically the DPDP retention cleanup
+      // job and the admin rejection flow. Drivers cannot delete their own
+      // submitted documents to evade the review process.
+      allow delete: if false;
+
+      // READ: owning driver or admin-claim user only. Never public.
+      // isAuthenticated() is checked explicitly on the owner branch to guard
+      // against a null request.auth producing a misleading uid comparison.
+      allow read: if (isAuthenticated() && request.auth.uid == driverId)
+                  || isAdmin();
+    }
+
+    // ── GST invoices ─────────────────────────────────────────────────────────
+    //
+    // Path: invoices/{jobId}.pdf
+    //
+    // Client writes (including deletes) are denied. The invoicing Cloud Function
+    // uses the Admin SDK (service account) which bypasses these rules. The rule
+    // here restricts client reads to admin-claim users only.
+
+    match /invoices/{jobId} {
+      allow write: if false; // Cloud Function (Admin SDK) only — includes delete
+      allow read:  if isAdmin();
+    }
+
+    // ── Catch-all deny ───────────────────────────────────────────────────────
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

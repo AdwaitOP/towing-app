@@ -1,0 +1,16 @@
+{
+  "_comment": "Template for usage_counters/{YYYY-MM} documents. Key format: '2026-08'",
+  "_usage": "A new document matching this shape is created by the dispatch Cloud Function at the start of each calendar month when no document yet exists for that month.",
+  "_spec_ref": "towing_dispatch_spec_v9.md §Billing & Cost Guardrails",
+
+  "olaMapsMatrixCalls": 0,
+  "whatsappTemplateSends": 0,
+
+  "softCapOlaMaps": 4500000,
+  "_softCapOlaMaps_note": "Ola Maps free tier is 5M calls/month. Soft cap at 4.5M (90%) so the circuit breaker trips before the limit, giving headroom for in-flight requests.",
+
+  "softCapWhatsapp": 900,
+  "_softCapWhatsapp_note": "Conservative soft cap on business-initiated WhatsApp template sends per month. Adjust based on observed usage and Meta's template messaging limits for your account tier.",
+
+  "_circuit_breaker_note": "When olaMapsMatrixCalls >= softCapOlaMaps, dispatch logic degrades gracefully (falls back to Haversine-only selection). This is checked at the top of the dispatch Cloud Function. See Phase 4."
+}

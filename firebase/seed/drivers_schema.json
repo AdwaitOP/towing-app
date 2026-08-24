@@ -1,0 +1,137 @@
+{
+  "_comment": "Schema reference for the 'drivers' Firestore collection. This is NOT a live Firestore document — it documents every field that a driver document may contain, its type, its writer, and its reader. Use this as the canonical field-name reference for all phases to prevent typos that silently break downstream logic.",
+  "_spec_ref": "towing_dispatch_spec_v9.md §Firestore Collections",
+
+  "uid": {
+    "type": "string",
+    "description": "Firebase Auth UID. Also used as the Firestore document ID.",
+    "writer": "driver (on account creation)",
+    "reader": "driver (own), admin"
+  },
+
+  "name": {
+    "type": "string",
+    "description": "Driver's full name.",
+    "writer": "driver",
+    "reader": "driver (own), admin"
+  },
+
+  "phone": {
+    "type": "string",
+    "description": "Driver's WhatsApp phone number in E.164 format (e.g. +919876543210). Used for OTP delivery.",
+    "writer": "driver (on profile creation)",
+    "reader": "driver (own), admin"
+  },
+
+  "truckType": {
+    "type": "string",
+    "enum": ["flatbed", "tochan", "hydraulic", "crane"],
+    "description": "Type of tow truck the driver operates.",
+    "writer": "driver",
+    "reader": "driver (own), admin, dispatch (Cloud Function)"
+  },
+
+  "vehicleNumber": {
+    "type": "string",
+    "description": "Vehicle registration plate number (e.g. MH-46-XXXX).",
+    "writer": "driver",
+    "reader": "driver (own), admin"
+  },
+
+  "isOnDuty": {
+    "type": "boolean",
+    "default": false,
+    "description": "Whether the driver is currently accepting jobs. Toggled by the driver from the Home Screen. Note: an on-duty driver can still be excluded from dispatch if verificationStatus != 'approved' or bannedUntil is in the future.",
+    "writer": "driver",
+    "reader": "driver (own), admin, dispatch (Cloud Function)"
+  },
+
+  "walletBalance": {
+    "type": "number",
+    "unit": "INR (paise? — use smallest currency unit to avoid float arithmetic)",
+    "description": "Driver's prepaid wallet balance. Commission is deducted on job acceptance; refunded on eligible cancellation. Top-up via Razorpay.",
+    "writer": "Cloud Function ONLY (wallet top-up, commission deduction, refund). Drivers cannot write this field.",
+    "reader": "driver (own), admin",
+    "IMPORTANT": "Store as integer (paise, i.e. INR * 100) to avoid floating-point precision issues. Phase 2/3 to confirm unit."
+  },
+
+  "verificationStatus": {
+    "type": "string",
+    "enum": ["pending", "approved", "rejected"],
+    "default": "pending",
+    "description": "Set to 'pending' when the driver submits KYC docs. Changed to 'approved' or 'rejected' by an admin via the Admin Panel Cloud Function. Dispatch excludes drivers that are not 'approved'. Spec: towing_dispatch_spec_v9.md §Firestore Collections line: verificationStatus: 'pending' | 'approved' | 'rejected'.",
+    "writer": "Cloud Function ONLY. Drivers cannot write this field.",
+    "reader": "driver (own), admin, dispatch (Cloud Function)"
+  },
+
+  "verificationDocs": {
+    "type": "map",
+    "description": "Firebase Storage URLs for KYC documents — NOT the images themselves.",
+    "fields": {
+      "idPhotoUrl":    { "type": "string", "description": "Storage URL for Aadhaar / Driving License photo" },
+      "rcPhotoUrl":    { "type": "string", "description": "Storage URL for Vehicle RC photo" },
+      "selfiePhotoUrl":{ "type": "string", "description": "Storage URL for live selfie — field name per spec: selfiePhotoUrl" },
+      "submittedAt":   { "type": "timestamp", "description": "When the driver submitted the KYC package. Used by the DPDP retention job." }
+    },
+    "writer": "Cloud Function ONLY (triggered after Storage upload completes). Drivers cannot write this field.",
+    "reader": "driver (own), admin"
+  },
+
+  "rejectionReason": {
+    "type": "string | null",
+    "default": null,
+    "description": "Human-readable reason provided by the admin when rejecting KYC. Sent to the driver via WhatsApp. Null until/unless rejected.",
+    "writer": "Cloud Function ONLY (admin-triggered rejection).",
+    "reader": "driver (own), admin"
+  },
+
+  "bannedUntil": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "If not null and in the future, the driver is temporarily banned. Dispatch skips this driver. The driver app shows a status banner. Set to now + 7 days on the 6th+ monthly cancellation (and reset on each strict-mode reban).",
+    "writer": "Cloud Function ONLY (cancellation handler). Drivers cannot write this field.",
+    "reader": "driver (own), admin, dispatch (Cloud Function)"
+  },
+
+  "strictMode": {
+    "type": "boolean",
+    "default": false,
+    "description": "Activated on the 6th cancellation in a calendar month. While true, every subsequent driver-initiated cancellation forfeits 100% commission and issues a fresh 7-day ban, bypassing the normal ramp. Resets to false at the start of the next calendar month (same lazy-reset check as monthlyCancelCount).",
+    "writer": "Cloud Function ONLY (cancellation handler). Drivers cannot write this field.",
+    "reader": "driver (own), admin, dispatch (Cloud Function)"
+  },
+
+  "monthlyCancelCount": {
+    "type": "map",
+    "description": "Tracks cancellation count for the current calendar month. Lazily reset: if the stored 'month' doesn't match the current calendar month when the cancellation handler runs, the handler resets count to 0 and strictMode to false before evaluating the new cancellation.",
+    "fields": {
+      "month": { "type": "string", "description": "Calendar month in 'YYYY-MM' format (e.g. '2026-08')" },
+      "count": { "type": "number", "description": "Number of driver-initiated cancellations so far this month (includes the 1st, penalty-free one)" }
+    },
+    "default": { "month": "", "count": 0 },
+    "writer": "Cloud Function ONLY (cancellation handler). Drivers cannot write this field.",
+    "reader": "driver (own), admin"
+  },
+
+  "createdAt": {
+    "type": "timestamp",
+    "description": "When the driver document was first created.",
+    "writer": "driver (set once on profile creation, or Cloud Function)",
+    "reader": "driver (own), admin"
+  },
+
+  "updatedAt": {
+    "type": "timestamp",
+    "description": "Last update timestamp. Set by any writer on every update.",
+    "writer": "driver or Cloud Function (whoever updates the doc)",
+    "reader": "driver (own), admin"
+  },
+
+  "location": {
+    "type": "GeoPoint | null",
+    "description": "Driver's most recently reported location. Updated by the Flutter background location service (Phase 5). Used by dispatch for Haversine pre-filter.",
+    "note": "Phase 1 schema only — the update mechanism (Phase 5) and the security rule for writing location (a driver can write their own location) will be handled when Phase 5 implements the location tracker. For now, treat location writes the same as other allowed driver updates.",
+    "writer": "driver (own location only)",
+    "reader": "admin, dispatch (Cloud Function)"
+  }
+}

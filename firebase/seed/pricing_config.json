@@ -1,0 +1,45 @@
+{
+  "_comment": "Seed document for Firestore collection: pricing_config, document ID: main",
+  "_usage": "Imported via: firebase emulators:start --import=firebase/seed/emulator_import",
+  "_spec_ref": "towing_dispatch_spec_v9.md §pricing_config",
+
+  "booking_tiers": {
+    "short_distance_limit_km": 10,
+    "long_distance_limit_km": 15,
+    "tier1_booking_fee": 100,
+    "tier1_driver_commission": 200,
+    "tier2_booking_fee": 200,
+    "tier2_driver_commission": 300,
+    "tier3_booking_fee": 300,
+    "tier3_driver_commission_base": 300,
+    "per_km_overage_rate": 50,
+    "_tier3_formula_note": "tier3_driver_commission = tier3_driver_commission_base + (per_km_overage_rate * (distanceKm - long_distance_limit_km)). per_km_overage_rate lives exclusively under booking_tiers — it is NOT shared with fare_formula. fare_formula uses per_km_rate (75) for the separate informational fare estimate. fareCalculator.js (Phase 2) is the single implementation of both formulas."
+  },
+
+  "fare_formula": {
+    "base_fare_standard": 1500,
+    "base_fare_flatbed": 2000,
+    "per_km_rate": 75,
+    "road_curvature_factor": 1.3,
+    "night_surge_multiplier": 1.25,
+    "night_surge_start_hour": 22,
+    "night_surge_end_hour": 6,
+    "highway_surge_multiplier": 1.2,
+    "highway_distance_threshold_km": 20,
+    "round_to_nearest": 10,
+    "_note": "Fare is an informational estimate only — never collected by the platform. The full towing fare is paid directly by the customer to the driver."
+  },
+
+  "cancellation_policy": {
+    "free_cancellations_per_month": 1,
+    "forfeit_pct_by_count": {
+      "2": 20,
+      "3": 30,
+      "4": 40,
+      "5": 50
+    },
+    "ban_threshold_count": 6,
+    "ban_duration_days": 7,
+    "_note": "Keys in forfeit_pct_by_count are strings because Firestore map keys are always strings. The cancellation handler looks up by String(monthlyCancelCount.count). The 1st cancellation is penalty-free (0% forfeited) per free_cancellations_per_month = 1; the 6th+ triggers the ban."
+  }
+}

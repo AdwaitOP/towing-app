@@ -1,0 +1,17 @@
+{
+  "_comment": "Seed document for Firestore collection: business_config, document ID: main",
+  "_usage": "Imported via: firebase emulators:start --import=firebase/seed/emulator_import",
+  "_spec_ref": "towing_dispatch_spec_v9.md §business_config",
+
+  "businessName": "",
+  "gstin": "",
+  "registeredAddress": "",
+  "invoiceNumberCounter": 0,
+
+  "retention_policy": {
+    "retention_months": 0,
+    "_TODO": "Set retention_months to the legally/operationally decided value before going live. Zero means the DPDP retention job will not delete any photos until this is configured. Consult your legal/compliance advisor — this value is intentionally left as 0 (no-op) rather than assuming any specific duration. See DPDP Act note in towing_dispatch_spec_v9.md §Part 2."
+  },
+
+  "_setup_note": "Fill businessName, gstin, and registeredAddress before Phase 3 invoicing goes live. The invoiceNumberCounter is incremented atomically by a Firestore transaction in the invoicing Cloud Function — never edit it manually."
+}
