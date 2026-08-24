@@ -14,7 +14,7 @@ Create a structured project containing the Flutter Driver App and Firebase Cloud
 
 **Mapping is split across two vendors, deliberately.** Mapbox handles the in-app map display in Part 1 (mature Flutter SDK, well-documented). All backend routing/distance-matrix calls used for driver dispatch in Part 2 go through **Ola Maps** instead of Mapbox — its free tier (5M calls/month per API) is far larger than Mapbox's for this kind of usage, and it's tuned for Indian road data. This is backend-only REST usage, so there's no mobile-SDK integration risk to weigh against it.
 
-**No standalone customer app.** Customers are served entirely through WhatsApp (invoice, mechanic lookup, all booking/payment interaction) plus a phone-in booking path handled by the two co-owners through the Admin Panel — see Part 3. A one-time emergency user is unlikely to install and reopen a dedicated app; this keeps the zero-install-friction advantage that made WhatsApp the right first channel in the first place. Revisit only if a repeat-customer/loyalty angle emerges later.
+**No standalone customer app.** Customers are served entirely through WhatsApp (invoice, all booking/payment interaction) plus a phone-in booking path handled by the two co-owners through the Admin Panel — see Part 3. A one-time emergency user is unlikely to install and reopen a dedicated app; this keeps the zero-install-friction advantage that made WhatsApp the right first channel in the first place. Revisit only if a repeat-customer/loyalty angle emerges later.
 
 ---
 
@@ -60,7 +60,7 @@ Create a structured project containing the Flutter Driver App and Firebase Cloud
   - `verificationDocs: { idPhotoUrl, rcPhotoUrl, selfiePhotoUrl, submittedAt }` *(new)* — Storage URLs, not the images themselves
   - `rejectionReason: string | null` *(new)*
 - `jobs` — now also carries `channel: 'whatsapp' | 'phone'`, `invoiceNumber`, `invoiceUrl` (set once the booking-fee invoice is generated — see GST Invoicing below), and `createdByAdmin: adminUid | null` (set only for phone-originated bookings).
-- `whatsapp_sessions/{phoneNumber}` — gains an `intent: 'tow' | 'mechanic'` field for the new intent-selection step in the WhatsApp flow.
+- `whatsapp_sessions/{phoneNumber}` — stores the customer's current WhatsApp towing-booking conversation state and accumulated booking inputs.
 - `processed_requests/{requestId}`
 - `pricing_config`
 - `usage_counters/{month}`
@@ -114,10 +114,7 @@ Unchanged — isolated pure function `functions/src/fareCalculator.js`, reads `f
 
 Express webhook, `x-hub-signature-256` verified, idempotent via `processed_requests`.
 
-- **State 0** *(new)*: on first contact, ask "Need a Tow (1) or a nearby Mechanic (2)?" and set `whatsapp_sessions.intent` accordingly.
-  - `intent: 'tow'` → proceeds into the existing flow below.
-  - `intent: 'mechanic'` *(new)* → ask for a location pin, query the **Ola Places API** for the nearest 3 mechanics within ~5km, reply with name + distance + a Maps link for each. This is a free lookup with no job or payment created — a pure value-add, not a monetized flow, so it doesn't touch Dispatch Logic at all.
-- State 1: PICKUP location pin. State 2: DESTINATION pin. State 3: Vehicle Type. State 4: Haversine distance + `calculateFare()`. State 5: reply with booking fee (Razorpay UPI Intent link) and estimated fare (collected directly by driver).
+- State 1: on first contact, ask for PICKUP location pin. State 2: DESTINATION pin. State 3: Vehicle Type. State 4: Haversine distance + `calculateFare()`. State 5: reply with booking fee (Razorpay UPI Intent link) and estimated fare (collected directly by driver).
 - Cancel command accepted at any point after State 5 payment and before completion — routes to the cancellation logic below.
 
 ### GST Invoicing *(new)*
@@ -219,6 +216,5 @@ A protected web dashboard for the two co-owners, built on the same Firebase proj
 - [ ] Config Editor writes go through a Cloud Function with type validation, not a raw client write to `pricing_config`
 - [ ] GST invoice PDFs are generated only for the booking fee amount — never for the full tow fare
 - [ ] Invoice numbers are assigned via an atomic Firestore transaction on `business_config.invoiceNumberCounter` — sequential, no gaps or duplicates
-- [ ] The mechanic-lookup WhatsApp flow uses Ola Places only and never creates a job or payment link
 - [ ] WhatsApp-originated and phone-originated bookings both call the same `createJobAndQuote()` function — no separate, less-validated path for phone bookings
 - [ ] Phone bookings created via the Admin Panel are logged to `admin_actions` and tagged `channel: 'phone'` / `createdByAdmin` on the job doc

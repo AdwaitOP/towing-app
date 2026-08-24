@@ -82,8 +82,7 @@ Document ID = customer phone in E.164 format. Managed exclusively by Cloud Funct
 | Field | Type | Notes |
 |---|---|---|
 | `phoneNumber` | `string` | E.164 |
-| `state` | `number` | Conversation state: 0=intent, 1=pickup, 2=destination, 3=vehicleType, 4=fareQuote, 5=paymentSent |
-| `intent` | `string \| null` | `tow \| mechanic` — set at State 0 |
+| `state` | `number` | Conversation state: 1=pickup, 2=destination, 3=vehicleType, 4=fareQuote, 5=paymentSent |
 | `pickupCoords` | `map \| null` | Accumulated across states |
 | `destCoords` | `map \| null` | — |
 | `vehicleType` | `string \| null` | — |

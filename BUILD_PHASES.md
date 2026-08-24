@@ -53,7 +53,7 @@ Order matters — phases 1–4 are strictly sequential (each depends on the last
 
 **Scope:**
 - The shared `createJobAndQuote(customerPhone, pickupCoords, destCoords, vehicleType, channel)` function — built here, called from here by the WhatsApp flow, and reused (not rebuilt) by Phase 6's phone-booking screen
-- WhatsApp webhook: signature verification, idempotency via `processed_requests`, State 0 (tow/mechanic intent) through State 5, the mechanic-lookup sub-flow via Ola Places, the cancel command
+- WhatsApp webhook: signature verification, idempotency via `processed_requests`, State 1 (pickup) through State 5, the cancel command
 - Driver OTP send/verify Cloud Functions (WhatsApp-delivered)
 - Razorpay webhook: signature verification, booking-fee success → triggers Dispatch Logic (Phase 4) + GST Invoicing, refund-success handling
 - GST Invoicing: PDF generation scoped to the booking fee only, sequential numbering via atomic transaction on `business_config.invoiceNumberCounter`, delivered as a WhatsApp document
@@ -67,7 +67,6 @@ Order matters — phases 1–4 are strictly sequential (each depends on the last
 - [ ] The platform's Razorpay integration only ever collects the booking fee and driver commission — the full towing fare never flows through the platform
 - [ ] GST invoice PDFs are generated only for the booking fee amount — never for the full tow fare
 - [ ] Invoice numbers are assigned via an atomic Firestore transaction — sequential, no gaps or duplicates
-- [ ] The mechanic-lookup WhatsApp flow uses Ola Places only and never creates a job or payment link
 - [ ] (partial — fully verified only after Phase 6) WhatsApp-originated and phone-originated bookings both call the same `createJobAndQuote()` function
 
 ---
