@@ -52,7 +52,7 @@ Order matters — phases 1–4 are strictly sequential (each depends on the last
 **Model:** Claude Sonnet 4.6 (Thinking) — **Mode:** Planning
 
 **Scope:**
-- The shared `createJobAndQuote(customerPhone, pickupCoords, destCoords, vehicleType, channel)` function — built here, called from here by the WhatsApp flow, and reused (not rebuilt) by Phase 6's phone-booking screen
+- The shared `createJobAndQuote(customerPhone, pickupCoords, destCoords, requestedTruckType, channel)` function — built here, called from here by the WhatsApp flow, and reused (not rebuilt) by Phase 6's phone-booking screen
 - WhatsApp webhook: signature verification, idempotency via `processed_requests`, State 1 (pickup) through State 5, the cancel command
 - Driver OTP send/verify Cloud Functions (WhatsApp-delivered)
 - Razorpay webhook: signature verification, booking-fee success → triggers Dispatch Logic (Phase 4) + GST Invoicing, refund-success handling
@@ -92,7 +92,7 @@ Order matters — phases 1–4 are strictly sequential (each depends on the last
 - [ ] 45s offer timeout implemented via Cloud Tasks, not an in-function sleep
 - [ ] Ola Maps Matrix API is only called against a pre-filtered shortlist, never the full on-duty fleet
 - [ ] GCP budget alert + `usage_counters` circuit breaker in place
-- [ ] Customer booking-fee cancellations are always non-refundable
+- [ ] Customer-paid booking fees are always non-refundable on customer cancellation
 - [ ] Driver commission refund on customer-initiated cancellation is unconditional (not subject to the ramp)
 - [ ] Driver self-cancellation ramp reads `cancellation_policy` from Firestore, not hardcoded percentages
 - [ ] `monthlyCancelCount` correctly resets on calendar-month rollover

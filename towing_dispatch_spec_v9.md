@@ -114,8 +114,8 @@ Unchanged — isolated pure function `functions/src/fareCalculator.js`, reads `f
 
 Express webhook, `x-hub-signature-256` verified, idempotent via `processed_requests`.
 
-- State 1: on first contact, ask for PICKUP location pin. State 2: DESTINATION pin. State 3: Vehicle Type. State 4: Haversine distance + `calculateFare()`. State 5: reply with booking fee (Razorpay UPI Intent link) and estimated fare (collected directly by driver).
-- Cancel command accepted at any point after State 5 payment and before completion — routes to the cancellation logic below.
+- State 1: on first contact, ask for PICKUP location pin. State 2: DESTINATION pin. State 3: asks for Flatbed vs Pulling/Tochan/Crane-style towing (stores requestedTruckType as flatbed or pulling, which maps to pricing serviceType flatbed or standard). State 4: Haversine distance + `calculateFare()`. State 5: reply with booking fee (Razorpay Payment Link) and estimated fare (collected directly by driver).
+- CANCEL is accepted while the booking is awaiting payment and, after payment, until the job is completed. Pre-payment and post-payment cancellation follow the separate rules below.
 
 ### GST Invoicing *(new)*
 
@@ -132,14 +132,18 @@ Triggered automatically the moment a booking-fee payment succeeds (see Razorpay 
 
 ### Dispatch Logic & Secure Transactions
 
-- **Job creation is a single shared function**, `createJobAndQuote(customerPhone, pickupCoords, destCoords, vehicleType, channel)`, called identically by the WhatsApp webhook (`channel: 'whatsapp'`) and the Admin Panel's phone-booking screen (`channel: 'phone'`, see Part 3). Same validation, same `fareCalculator` call, same tier lookup, same idempotency handling either way — a phone booking is never a separate, less-validated path.
+- **Job creation is a single shared function**, `createJobAndQuote(customerPhone, pickupCoords, destCoords, requestedTruckType, channel)`, called identically by the WhatsApp webhook (`channel: 'whatsapp'`) and the Admin Panel's phone-booking screen (`channel: 'phone'`, see Part 3). Same validation, same `fareCalculator` call, same tier lookup, same idempotency handling either way — a phone booking is never a separate, less-validated path.
 - Two-stage driver selection (Haversine pre-filter → **Ola Maps Matrix API** on shortlist), **excluding any driver with `bannedUntil` in the future or `verificationStatus != 'approved'`**. *(Switched from Mapbox Matrix — Ola Maps' free allowance is far larger and its road data is India-tuned; Mapbox is retained only for the in-app map display in Part 1.)*
-- Job state machine: `pending_offer → offered → accepted → in_progress → completed`, plus cancellation states below.
-- Accepting a job: atomic Firestore transaction checking `job.status == 'offered' && job.offeredTo == driverId`, verifying wallet balance ≥ `driverCommission`, deducting it, flipping status to `accepted`.
+- Job state machine: `awaiting_payment → pending_offer → offered → accepted → in_progress → completed`, plus cancellation states below.
+- Accepting a job: atomic Firestore transaction checking `job.status == 'offered' && job.offeredTo == driverId`, verifying wallet balance ≥ `driverCommissionPaise`, deducting it, flipping status to `accepted`.
 - ACCEPT JOB idempotent via client `requestId`.
 - 45-second offer timeout via a Cloud Task scheduled for `offerExpiresAt`, never an in-function sleep.
 
 ### Cancellation & Refund Policy
+
+- **Customer Cancels Before Payment:** Booking fee has NOT been collected. `cancellationRequestedAt` is persisted first, and cancellation of the unpaid Razorpay Payment Link (`POST /v1/payment_links/{job.razorpayPaymentLinkId}/cancel`) is attempted. Status becomes `cancelled_customer` ONLY after Razorpay confirms the unpaid Payment Link was cancelled, and the booking session is cleared/reset. If Razorpay indicates payment already succeeded, the system does NOT finalize it as an unpaid cancellation; it follows the documented paid-cancellation reconciliation path instead. No refund is required because no payment was made.
+- **Customer Cancels After Booking-Fee Payment:** Booking fee is NON-REFUNDABLE. Payment remains recorded, GST invoice remains valid/generated, and no refund occurs. Status eventually becomes `cancelled_customer`. Phase 4 handles any driver/wallet consequences. (If payment succeeds while customer cancellation is being processed: payment is persisted, invoice generated, booking fee remains non-refundable, dispatch is skipped, and it routes into paid-customer-cancellation).
+- **System/Platform Refund:** If the platform cannot provide a driver and the specification requires a refund, the booking fee may be refunded. Phase 4 initiates the Razorpay Refund API, and Phase 3 handles `refund.processed` reconciliation.
 
 | Scenario | Booking fee (customer) | Driver commission |
 |---|---|---|
@@ -167,7 +171,7 @@ Implementation notes:
 - Customer booking-fee refunds (the "no driver found" case only) require an actual Razorpay Refunds API call against the original payment ID stored on the job doc.
 - Every driver-initiated cancellation increments `monthlyCancelCount` (even the 1st, penalty-free one) so the count is accurate for the next cancellation in the same month.
 - The reset check is a single piece of logic run at the top of the cancellation handler: if the driver's stored `monthlyCancelCount.month` doesn't match the current calendar month, reset the count to 0 **and** `strictMode` to `false` in the same write, before evaluating the penalty for this cancellation.
-- Job doc fields: `cancelledBy` (`customer` | `driver` | `system`), `cancellationReason`, `refundedAmount`, `forfeitedAmount`.
+- Job doc fields: `cancelledBy` (`customer` | `driver` | `system`), `cancellationReason`, `refundedAmountPaise`, `forfeitedAmount`.
 
 ---
 
@@ -178,10 +182,10 @@ A protected web dashboard for the two co-owners, built on the same Firebase proj
 - **Access:** deployed as a normal web app on Firebase Hosting (its own URL, e.g. `https://your-project.web.app`, or a custom domain later) — no native app, opens in any browser including a phone's.
 - **Auth:** Firebase Auth with email/password or Google sign-in for just the two of you (not the WhatsApp OTP drivers use), gated by a custom `admin: true` claim. Custom claims **cannot** be set from the Firebase Console UI — there's no button for it — they require the Admin SDK. Bootstrap sequence: both co-owners create an account on the login screen, then one of you runs a one-time local script (or a temporary Cloud Function, deleted right after) using the project's service account credentials to call `admin.auth().setCustomUserClaims(uid, { admin: true })` for both accounts. From then on every sign-in carries the claim, and every admin-panel Cloud Function and Firestore/Storage rule checks it server-side before allowing a write — so the panel's URL itself doesn't need to stay secret; without the claim, nothing writable is reachable through it.
 - **Screen 1 — Driver Verification Queue:** lists drivers with `verificationStatus == 'pending'`, showing the ID photo, RC photo, and selfie side by side against the profile info the driver entered (name, plate number, truck type) for cross-checking. Approve or Reject; rejecting requires a reason, which triggers the WhatsApp rejection notice back to the driver and reopens their upload step.
-- **Screen 2 — Live Jobs View:** real-time list of jobs by status (`pending_offer` / `offered` / `accepted` / `in_progress` / `completed` / cancellation states), assigned driver, and timestamps — a live Firestore listener rather than polling, so it doesn't add meaningfully to function invocation count.
+- **Screen 2 — Live Jobs View:** real-time list of jobs by status (`awaiting_payment` / `pending_offer` / `offered` / `accepted` / `in_progress` / `completed` / cancellation states), assigned driver, and timestamps — a live Firestore listener rather than polling, so it doesn't add meaningfully to function invocation count.
 - **Screen 3 — Driver Management:** wallet balance, `verificationStatus`, `bannedUntil`, `strictMode`, and current `monthlyCancelCount` per driver, plus a **"Forgive this cancellation"** action. This calls the same audited wallet-credit Cloud Function the backend already uses for legitimate refunds — never a raw Firestore edit — and requires a reason, logged to `admin_actions`.
 - **Screen 4 — Config Editor:** structured forms (typed fields, not a raw JSON textarea) for `booking_tiers`, `fare_formula`, and `cancellation_policy`, validated before writing — this is what actually delivers on "the formula should be easily editable" without risking a malformed write (e.g., a string landing where `per_km_rate` expects a number) taking down every fare calculation until someone notices. Writes go through a Cloud Function, not a direct client write, so there's one validation and audit point.
-- **Screen 5 — Phone Booking** *(new)*: for the two of you to take bookings by phone. A simple form — customer phone number, pickup/destination (address search via Ola Maps geocoding, not manual lat/lng entry), vehicle type — that calls the exact same `createJobAndQuote()` function the WhatsApp flow uses (see Dispatch Logic), tagging the job `channel: 'phone'` and `createdByAdmin`. The customer still gets the booking-fee payment link and everything downstream (dispatch, invoice) via WhatsApp exactly as normal — the phone call only replaces how the pickup/destination/vehicle-type details get captured, not what happens after. If a caller genuinely has no WhatsApp, the fallback is manual — read the amount and a plain payment-link URL aloud or via SMS — rather than building a second automated delivery channel for an edge case.
+- **Screen 5 — Phone Booking** *(new)*: for the two of you to take bookings by phone. A simple form — customer phone number, pickup/destination (address search via Ola Maps geocoding, not manual lat/lng entry), towing category (flatbed/pulling) — that calls the exact same `createJobAndQuote()` function the WhatsApp flow uses (see Dispatch Logic), tagging the job `channel: 'phone'` and `createdByAdmin`. The customer still gets the booking-fee payment link and everything downstream (dispatch, invoice) via WhatsApp exactly as normal — the phone call only replaces how the pickup/destination/towing category details get captured, not what happens after. If a caller genuinely has no WhatsApp, the fallback is manual — read the amount and a plain payment-link URL aloud or via SMS — rather than building a second automated delivery channel for an edge case.
 
 ---
 

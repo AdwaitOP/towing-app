@@ -50,25 +50,31 @@ Document ID = Firestore auto-ID. Created by `createJobAndQuote()` (Phase 3), wri
 | `customerPhone` | `string` | — | E.164 |
 | `pickupCoords` | `map {lat, lng}` | — | From WhatsApp location pin |
 | `destCoords` | `map {lat, lng}` | — | From WhatsApp location pin |
-| `vehicleType` | `string` | — | Customer's vehicle type |
+| `requestedTruckType` | `string` | — | Customer's requested towing category (flatbed \| pulling) |
 | `distanceKm` | `number` | — | Haversine straight-line distance |
-| `bookingFee` | `number` | — | Platform fee (paise). **Never the full fare.** |
-| `driverCommission` | `number` | — | Deducted from driver wallet on accept (paise) |
-| `estimatedFare` | `number` | — | Informational only. Customer pays driver directly. |
-| `status` | `string` enum | `pending_offer` | `pending_offer \| offered \| accepted \| in_progress \| completed \| cancelled_customer \| cancelled_driver \| cancelled_system` |
+| `bookingFeePaise` | `number` | — | Platform fee (paise). **Never the full fare.** |
+| `driverCommissionPaise` | `number` | — | Deducted from driver wallet on accept (paise) |
+| `estimatedFarePaise` | `number` | — | Informational only. Customer pays driver directly. |
+| `status` | `string` enum | `awaiting_payment` | `awaiting_payment \| pending_offer \| offered \| accepted \| in_progress \| completed \| cancelled_customer \| cancelled_driver \| cancelled_system` |
 | `offeredTo` | `string \| null` | `null` | UID of driver currently being offered the job |
 | `assignedDriver` | `string \| null` | `null` | UID of driver who accepted |
 | `channel` | `string` enum | — | `whatsapp \| phone` |
 | `createdByAdmin` | `string \| null` | `null` | Admin UID for phone-originated bookings |
-| `razorpayOrderId` | `string \| null` | `null` | — |
+| `razorpayPaymentLinkId` | `string \| null` | `null` | — |
+| `razorpayPaymentLinkUrl` | `string \| null` | `null` | Razorpay short_url returned on link creation |
 | `razorpayPaymentId` | `string \| null` | `null` | Stored for refund operations |
+| `paymentConfirmedAt` | `Timestamp \| null` | `null` | Timestamp when payment was verified and persisted |
 | `invoiceNumber` | `string \| null` | `null` | Sequential GST invoice number |
 | `invoiceUrl` | `string \| null` | `null` | Storage URL for invoice PDF |
+| `invoiceSentAt` | `Timestamp \| null` | `null` | Written only after successful WhatsApp invoice delivery |
 | `offerExpiresAt` | `Timestamp \| null` | `null` | Cloud Task scheduled for this time |
 | `requestId` | `string` | — | Client UUID for accept idempotency |
 | `cancelledBy` | `string \| null` | `null` | `customer \| driver \| system` |
+| `cancellationRequestedAt` | `Timestamp \| null` | `null` | — |
 | `cancellationReason` | `string \| null` | `null` | — |
-| `refundedAmount` | `number \| null` | `null` | Paise |
+| `razorpayRefundId` | `string \| null` | `null` | — |
+| `refundConfirmedAt` | `Timestamp \| null` | `null` | — |
+| `refundedAmountPaise` | `number \| null` | `null` | Paise |
 | `forfeitedAmount` | `number \| null` | `null` | Paise |
 | `createdAt` | `Timestamp` | — | — |
 | `updatedAt` | `Timestamp` | — | — |
@@ -82,11 +88,13 @@ Document ID = customer phone in E.164 format. Managed exclusively by Cloud Funct
 | Field | Type | Notes |
 |---|---|---|
 | `phoneNumber` | `string` | E.164 |
-| `state` | `number` | Conversation state: 1=pickup, 2=destination, 3=vehicleType, 4=fareQuote, 5=paymentSent |
-| `pickupCoords` | `map \| null` | Accumulated across states |
-| `destCoords` | `map \| null` | — |
-| `vehicleType` | `string \| null` | — |
+| `state` | `number` | Conversation state: 1=pickup, 2=destination, 3=requestedTruckType, 4=fareQuote, 5=paymentSent |
+| `pickupCoords` | `map {lat, lng} \| null` | — |
+| `destCoords` | `map {lat, lng} \| null` | — |
+| `requestedTruckType` | `string \| null` | `flatbed \| pulling` |
 | `jobId` | `string \| null` | Set once job is created |
+| `lastProcessedMessageId` | `string \| null` | For WhatsApp webhook idempotency / outbound retries |
+| `pendingReply` | `map \| null` | Serialized outbound WhatsApp reply used to recover/resend after an external send failure |
 | `updatedAt` | `Timestamp` | — |
 
 ---

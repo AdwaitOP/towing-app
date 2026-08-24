@@ -38,9 +38,13 @@
     "reader": "assigned driver, admin"
   },
 
-  "vehicleType": {
+  "requestedTruckType": {
     "type": "string",
-    "description": "Customer's vehicle type (e.g. 'car', 'bike', 'suv'). Used for fare calculation and matching to appropriate truck type.",
+    "enum": [
+      "flatbed",
+      "pulling"
+    ],
+    "description": "Customer's requested towing category: 'flatbed' (maps to fareCalculator serviceType 'flatbed') or 'pulling' (maps to fareCalculator serviceType 'standard').",
     "writer": "Cloud Function (createJobAndQuote)",
     "reader": "assigned driver, admin"
   },
@@ -52,26 +56,26 @@
     "reader": "assigned driver, admin"
   },
 
-  "bookingFee": {
+  "bookingFeePaise": {
     "type": "number",
-    "unit": "INR (integer paise recommended)",
-    "description": "Platform booking fee charged to the customer. Tier-based. This is the ONLY amount the platform collects from the customer — never the full tow fare.",
+    "unit": "integer paise",
+    "description": "Platform booking fee charged to the customer in integer paise. Tier-based. This is the ONLY amount the platform collects from the customer — never the full tow fare.",
     "writer": "Cloud Function (createJobAndQuote via fareCalculator)",
     "reader": "assigned driver, admin"
   },
 
-  "driverCommission": {
+  "driverCommissionPaise": {
     "type": "number",
-    "unit": "INR (integer paise recommended)",
-    "description": "Amount deducted from the driver's wallet on job acceptance. Tier-based; Tier 3 uses the formula: tier3_driver_commission_base + (per_km_overage_rate * (distanceKm - long_distance_limit_km)).",
+    "unit": "integer paise",
+    "description": "Amount in integer paise deducted from the driver's wallet on job acceptance. Tier-based; Tier 3 uses the formula: tier3_driver_commission_base + (per_km_overage_rate * (distanceKm - long_distance_limit_km)).",
     "writer": "Cloud Function (createJobAndQuote via fareCalculator)",
     "reader": "assigned driver, admin"
   },
 
-  "estimatedFare": {
+  "estimatedFarePaise": {
     "type": "number",
-    "unit": "INR",
-    "description": "Estimated full tow fare — informational only, never collected by the platform. Shown to customer as 'collected directly by driver'. Calculated by fareCalculator using fare_formula.",
+    "unit": "integer paise",
+    "description": "Estimated full tow fare in integer paise — informational only, never collected by the platform. Shown to customer as 'collected directly by driver'. Calculated by fareCalculator using fare_formula.",
     "writer": "Cloud Function (createJobAndQuote via fareCalculator)",
     "reader": "assigned driver, customer (via WhatsApp), admin"
   },
@@ -79,6 +83,7 @@
   "status": {
     "type": "string",
     "enum": [
+      "awaiting_payment",
       "pending_offer",
       "offered",
       "accepted",
@@ -88,7 +93,7 @@
       "cancelled_driver",
       "cancelled_system"
     ],
-    "description": "Job state machine status. State transitions are enforced inside atomic Cloud Function transactions. The 'cancelled_system' status covers the no-driver-found case after the offer cascade is exhausted.",
+    "description": "Job state machine status. Starts at awaiting_payment. State transitions are enforced inside atomic Cloud Function transactions. The 'cancelled_system' status covers the no-driver-found case after the offer cascade is exhausted.",
     "writer": "Cloud Function ONLY",
     "reader": "assigned driver (current/offered), admin"
   },
@@ -124,10 +129,18 @@
     "reader": "admin"
   },
 
-  "razorpayOrderId": {
+  "razorpayPaymentLinkId": {
     "type": "string | null",
     "default": null,
-    "description": "Razorpay order ID for the booking-fee payment. Created by the WhatsApp flow Cloud Function and sent to the customer as a UPI Intent link.",
+    "description": "Razorpay Payment Link ID (plink_...) returned for the booking-fee payment.",
+    "writer": "Cloud Function (messaging — Phase 3)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "razorpayPaymentLinkUrl": {
+    "type": "string | null",
+    "default": null,
+    "description": "The Razorpay short_url returned when the Payment Link is created. Stored so payment reminders and retries can resend without contacting Razorpay again.",
     "writer": "Cloud Function (messaging — Phase 3)",
     "reader": "admin, Cloud Functions"
   },
@@ -136,6 +149,14 @@
     "type": "string | null",
     "default": null,
     "description": "Razorpay payment ID received from the Razorpay webhook on payment success. Stored for refund operations (no-driver-found case).",
+    "writer": "Cloud Function (Razorpay webhook handler — Phase 3)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "paymentConfirmedAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Timestamp when the successful booking-fee payment was verified and persisted.",
     "writer": "Cloud Function (Razorpay webhook handler — Phase 3)",
     "reader": "admin, Cloud Functions"
   },
@@ -154,6 +175,14 @@
     "description": "Firebase Storage URL for the generated invoice PDF. Set once the PDF is uploaded. The PDF is also sent to the customer as a WhatsApp document — this URL is for admin reference.",
     "writer": "Cloud Function (invoicing — Phase 3)",
     "reader": "admin"
+  },
+
+  "invoiceSentAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Timestamp written only after successful WhatsApp delivery of the booking-fee invoice.",
+    "writer": "Cloud Function (invoicing / Razorpay webhook — Phase 3)",
+    "reader": "admin, Cloud Functions"
   },
 
   "offerExpiresAt": {
@@ -188,7 +217,31 @@
     "reader": "admin"
   },
 
-  "refundedAmount": {
+  "cancellationRequestedAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Timestamp when the customer requested cancellation. Used to prevent race conditions with incoming payments.",
+    "writer": "Cloud Function (messaging — Phase 3)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "razorpayRefundId": {
+    "type": "string | null",
+    "default": null,
+    "description": "Razorpay refund ID received from the refund.processed webhook.",
+    "writer": "Cloud Function (Razorpay webhook handler — Phase 3)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "refundConfirmedAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Timestamp when the refund.processed webhook successfully processed.",
+    "writer": "Cloud Function (Razorpay webhook handler — Phase 3)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "refundedAmountPaise": {
     "type": "number | null",
     "unit": "INR (integer paise recommended)",
     "default": null,
