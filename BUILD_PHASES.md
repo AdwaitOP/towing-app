@@ -52,7 +52,7 @@ Order matters — phases 1–4 are strictly sequential (each depends on the last
 **Model:** Claude Sonnet 4.6 (Thinking) — **Mode:** Planning
 
 **Scope:**
-- The shared `createJobAndQuote(customerPhone, pickupCoords, destCoords, requestedTruckType, channel)` function — built here, called from here by the WhatsApp flow, and reused (not rebuilt) by Phase 6's phone-booking screen
+- The shared `createJobAndQuote(jobId, customerPhone, pickupCoords, destCoords, requestedTruckType, channel)` function — built here, called from here by the WhatsApp flow, and reused (not rebuilt) by Phase 6's phone-booking screen
 - WhatsApp webhook: signature verification, idempotency via `processed_requests`, State 1 (pickup) through State 5, the cancel command
 - Driver OTP send/verify Cloud Functions (WhatsApp-delivered)
 - Razorpay webhook: signature verification, booking-fee success → triggers Dispatch Logic (Phase 4) + GST Invoicing, refund-success handling
@@ -63,6 +63,9 @@ Order matters — phases 1–4 are strictly sequential (each depends on the last
 **Definition of done:**
 - [ ] WhatsApp and Razorpay webhook signatures verified on every request
 - [ ] Webhook idempotency: duplicate message IDs / retried requests never cause duplicate side effects
+- [ ] Reclaimable per-session processing lease implemented (owner + expiry)
+- [ ] Preallocated `jobId` persisted in session before external Razorpay work
+- [ ] Retries reuse the same `jobId` to prevent duplicate logical bookings
 - [ ] Driver OTP delivered via WhatsApp, not Firebase Phone Auth SMS
 - [ ] The platform's Razorpay integration only ever collects the booking fee and driver commission — the full towing fare never flows through the platform
 - [ ] GST invoice PDFs are generated only for the booking fee amount — never for the full tow fare

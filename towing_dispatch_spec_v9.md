@@ -117,6 +117,36 @@ Express webhook, `x-hub-signature-256` verified, idempotent via `processed_reque
 - State 1: on first contact, ask for PICKUP location pin. State 2: DESTINATION pin. State 3: asks for Flatbed vs Pulling/Tochan/Crane-style towing (stores requestedTruckType as flatbed or pulling, which maps to pricing serviceType flatbed or standard). State 4: Haversine distance + `calculateFare()`. State 5: reply with booking fee (Razorpay Payment Link) and estimated fare (collected directly by driver).
 - CANCEL is accepted while the booking is awaiting payment and, after payment, until the job is completed. Pre-payment and post-payment cancellation follow the separate rules below.
 
+### Session Concurrency & Job Creation Invariants
+
+For a WhatsApp message that causes job creation, the following sequence is mandatory:
+
+1. Generate/preallocate the Firestore job document ID locally.
+2. In the `whatsapp_sessions/{phone}` transaction, BEFORE any Razorpay/network side effect, persist:
+   - `processingMessageId` = current Meta message ID (owner of the current session-processing claim)
+   - `processingLeaseUntil` = lease expiry
+   - `jobId` = the preallocated job ID
+3. Commit that transaction.
+4. Only AFTER the transaction commits call: `createJobAndQuote(jobId, customerPhone, pickupCoords, destCoords, requestedTruckType, channel)`
+5. `createJobAndQuote` must always operate on exactly `jobs/{jobId}`.
+6. On retry of the same Meta message:
+   - reuse `session.jobId`
+   - never generate a new logical job ID
+   - reuse `jobs/{jobId}` if it already exists
+   - reuse the stored Razorpay Payment Link if present
+   - if local Razorpay link fields are missing, recover by `reference_id = jobId` before creating another Payment Link
+
+**Crash Case Example:**
+If `session.jobId` is persisted → job created → Razorpay link created → process crashes.
+A retry MUST resume the same `jobId` from the session and must not create a duplicate logical booking.
+
+**Session Lease Semantics:**
+- No active claim → current message may claim
+- Same `processingMessageId` → same-message retry may resume
+- Different message + unexpired lease → do not process concurrently; return retryable handling
+- Different message + expired lease → claim may be transactionally reclaimed
+*(Note: the lease protects local transaction concurrency; it does not make external side effects exactly-once).*
+
 ### GST Invoicing *(new)*
 
 Triggered automatically the moment a booking-fee payment succeeds (see Razorpay Webhook Endpoint below) — not a separate customer-facing feature to build, just a step in the existing payment flow.
@@ -132,7 +162,7 @@ Triggered automatically the moment a booking-fee payment succeeds (see Razorpay 
 
 ### Dispatch Logic & Secure Transactions
 
-- **Job creation is a single shared function**, `createJobAndQuote(customerPhone, pickupCoords, destCoords, requestedTruckType, channel)`, called identically by the WhatsApp webhook (`channel: 'whatsapp'`) and the Admin Panel's phone-booking screen (`channel: 'phone'`, see Part 3). Same validation, same `fareCalculator` call, same tier lookup, same idempotency handling either way — a phone booking is never a separate, less-validated path.
+- **Job creation is a single shared function**, `createJobAndQuote(jobId, customerPhone, pickupCoords, destCoords, requestedTruckType, channel)`, called identically by the WhatsApp webhook (`channel: 'whatsapp'`) and the Admin Panel's phone-booking screen (`channel: 'phone'`, see Part 3). Same validation, same `fareCalculator` call, same tier lookup, same idempotency handling either way — a phone booking is never a separate, less-validated path.
 - Two-stage driver selection (Haversine pre-filter → **Ola Maps Matrix API** on shortlist), **excluding any driver with `bannedUntil` in the future or `verificationStatus != 'approved'`**. *(Switched from Mapbox Matrix — Ola Maps' free allowance is far larger and its road data is India-tuned; Mapbox is retained only for the in-app map display in Part 1.)*
 - Job state machine: `awaiting_payment → pending_offer → offered → accepted → in_progress → completed`, plus cancellation states below.
 - Accepting a job: atomic Firestore transaction checking `job.status == 'offered' && job.offeredTo == driverId`, verifying wallet balance ≥ `driverCommissionPaise`, deducting it, flipping status to `accepted`.

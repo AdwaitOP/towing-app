@@ -93,6 +93,8 @@ Document ID = customer phone in E.164 format. Managed exclusively by Cloud Funct
 | `destCoords` | `map {lat, lng} \| null` | — |
 | `requestedTruckType` | `string \| null` | `flatbed \| pulling` |
 | `jobId` | `string \| null` | Set once job is created |
+| `processingMessageId` | `string \| null` | Identifies which Meta message currently owns the conversation-processing claim |
+| `processingLeaseUntil` | `Timestamp \| null` | Allows another invocation to reclaim an abandoned claim after expiry |
 | `lastProcessedMessageId` | `string \| null` | For WhatsApp webhook idempotency / outbound retries |
 | `pendingReply` | `map \| null` | Serialized outbound WhatsApp reply used to recover/resend after an external send failure |
 | `updatedAt` | `Timestamp` | — |
