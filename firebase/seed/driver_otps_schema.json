@@ -1,0 +1,50 @@
+{
+  "_comment": "Schema reference for the Cloud Function-only 'driver_otps' collection. The document ID is the normalized E.164 driver phone number. This is not a live Firestore document.",
+  "_spec_ref": "towing_dispatch_spec_v9.md §business_config and docs/data_model.md §driver_otps/{phoneNumber}",
+  "_security": "Never store the plaintext OTP or OTP_PEPPER in this collection. OTP_PEPPER is a Secret Manager secret.",
+
+  "challengeId": {
+    "type": "string",
+    "description": "Random identifier replaced with every permitted send or resend."
+  },
+  "hash": {
+    "type": "string",
+    "description": "Scrypt-derived OTP hash; never plaintext."
+  },
+  "salt": {
+    "type": "string",
+    "description": "Random per-challenge salt."
+  },
+  "expiresAt": {
+    "type": "timestamp",
+    "description": "Challenge expiry derived from business_config/main.otpPolicy.otpExpirySeconds."
+  },
+  "attempts": {
+    "type": "integer",
+    "description": "Verification attempts against the current challenge; reset only when the challenge is replaced."
+  },
+  "consumedAt": {
+    "type": "timestamp | null",
+    "description": "Set once after the unchanged challenge is successfully verified."
+  },
+  "verifiedUid": {
+    "type": "string | null",
+    "description": "Firebase Auth UID associated after challenge consumption. It is cleared whenever a permitted resend replaces the challenge. An Auth/token failure leaves the challenge consumed; recovery requires a new OTP without resetting abuse counters."
+  },
+  "lastSentAt": {
+    "type": "timestamp",
+    "description": "Last permitted send time, used for the resend cooldown."
+  },
+  "sendWindowStartedAt": {
+    "type": "timestamp",
+    "description": "Start of the active abuse-accounting window."
+  },
+  "sendCount": {
+    "type": "integer",
+    "description": "Permitted sends in the active window. Replacing a challenge does not erase this counter."
+  },
+  "blockedUntil": {
+    "type": "timestamp | null",
+    "description": "Send block expiry. The next permitted send after expiry starts a fresh window and counter."
+  }
+}

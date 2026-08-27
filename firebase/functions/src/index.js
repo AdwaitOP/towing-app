@@ -22,15 +22,27 @@
 const { retentionCleanup } = require('./jobs/retentionCleanup');
 exports.retentionCleanup = retentionCleanup;
 
-// ── Phase 3 (placeholder — uncomment when Phase 3 is implemented) ────────────
-// const { whatsappWebhook } = require('./messaging/whatsappWebhook');
-// const { driverOtpSend } = require('./messaging/driverOtpSend');
-// const { driverOtpVerify } = require('./messaging/driverOtpVerify');
-// const { razorpayWebhook } = require('./payments/razorpayWebhook');
-// exports.whatsappWebhook = whatsappWebhook;
-// exports.driverOtpSend = driverOtpSend;
-// exports.driverOtpVerify = driverOtpVerify;
-// exports.razorpayWebhook = razorpayWebhook;
+const { onRequest } = require('firebase-functions/v2/https');
+
+// ── Phase 3 (implemented) ───────────────────────────────────────────────────
+const { handleWhatsAppWebhook } = require('./messaging/whatsappWebhook');
+const { driverOtpSend } = require('./messaging/driverOtpSend');
+const { driverOtpVerify } = require('./messaging/driverOtpVerify');
+const { handleRazorpayWebhook } = require('./payments/razorpayWebhook');
+
+exports.whatsappWebhook = onRequest({
+  secrets: [
+    'WHATSAPP_APP_SECRET',
+    'WHATSAPP_VERIFY_TOKEN',
+    'WHATSAPP_ACCESS_TOKEN',
+    'RAZORPAY_KEY_SECRET',
+  ],
+}, handleWhatsAppWebhook);
+exports.driverOtpSend = onRequest({ secrets: ['OTP_PEPPER', 'WHATSAPP_ACCESS_TOKEN'] }, driverOtpSend);
+exports.driverOtpVerify = onRequest({ secrets: ['OTP_PEPPER'] }, driverOtpVerify);
+exports.razorpayWebhook = onRequest({
+  secrets: ['RAZORPAY_WEBHOOK_SECRET', 'WHATSAPP_ACCESS_TOKEN'],
+}, handleRazorpayWebhook);
 
 // ── Phase 4 (placeholder) ────────────────────────────────────────────────────
 // const { acceptJob } = require('./dispatch/acceptJob');

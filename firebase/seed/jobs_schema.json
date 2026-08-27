@@ -56,6 +56,14 @@
     "reader": "assigned driver, admin"
   },
 
+  "pricingTier": {
+    "type": "number",
+    "enum": [1, 2, 3],
+    "description": "Commission/booking-fee tier returned by the trusted Phase 2 calculator and fixed when the job is created.",
+    "writer": "Cloud Function (createJobAndQuote)",
+    "reader": "admin, Cloud Functions"
+  },
+
   "bookingFeePaise": {
     "type": "number",
     "unit": "integer paise",
@@ -124,8 +132,8 @@
   "createdByAdmin": {
     "type": "string | null",
     "default": null,
-    "description": "Admin UID of the co-owner who created this job via the Admin Panel phone-booking screen. Null for WhatsApp-originated bookings. Tagged on the job doc and also written to admin_actions.",
-    "writer": "Cloud Function (createJobAndQuote — passed as parameter)",
+    "description": "Reserved for the Phase 6 Admin Panel phone-booking attribution. The current Phase 3 six-argument createJobAndQuote initializes this field to null and does not receive an admin UID.",
+    "writer": "Phase 3 createJobAndQuote initializes null; Phase 6 must define the authenticated admin attribution write",
     "reader": "admin"
   },
 
@@ -143,6 +151,22 @@
     "description": "The Razorpay short_url returned when the Payment Link is created. Stored so payment reminders and retries can resend without contacting Razorpay again.",
     "writer": "Cloud Function (messaging — Phase 3)",
     "reader": "admin, Cloud Functions"
+  },
+
+  "paymentLinkProvisioningOwner": {
+    "type": "string | null",
+    "default": null,
+    "description": "Random owner token fencing recoverable Razorpay Payment Link provisioning.",
+    "writer": "Cloud Function (messaging — Phase 3)",
+    "reader": "Cloud Functions"
+  },
+
+  "paymentLinkProvisioningLeaseUntil": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Expiry of the Payment Link provisioning owner; a stale claim may be reclaimed.",
+    "writer": "Cloud Function (messaging — Phase 3)",
+    "reader": "Cloud Functions"
   },
 
   "razorpayPaymentId": {
@@ -180,9 +204,65 @@
   "invoiceSentAt": {
     "type": "timestamp | null",
     "default": null,
-    "description": "Timestamp written only after successful WhatsApp delivery of the booking-fee invoice.",
+    "description": "Timestamp written only after Meta accepts the outbound WhatsApp booking-fee invoice message. This is provider acceptance, not proof of recipient delivery; retries remain at-least-once.",
     "writer": "Cloud Function (invoicing / Razorpay webhook — Phase 3)",
     "reader": "admin, Cloud Functions"
+  },
+
+  "invoiceStoragePath": {
+    "type": "string | null",
+    "default": null,
+    "description": "Exact private Firebase Storage object path invoices/{jobId}.pdf.",
+    "writer": "Cloud Function (invoicing — Phase 3)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "invoiceIssueDateIst": {
+    "type": "string | null",
+    "default": null,
+    "description": "Immutable invoice issue date in YYYY-MM-DD using Asia/Kolkata.",
+    "writer": "Cloud Function (invoicing — Phase 3)",
+    "reader": "admin"
+  },
+
+  "invoiceIssuedAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Instant paired with invoiceIssueDateIst and reused on recovery.",
+    "writer": "Cloud Function (invoicing — Phase 3)",
+    "reader": "admin"
+  },
+
+  "invoiceWhatsAppMediaId": {
+    "type": "string | null",
+    "default": null,
+    "description": "Meta media ID returned for the private PDF upload.",
+    "writer": "Cloud Function (invoicing — Phase 3)",
+    "reader": "Cloud Functions"
+  },
+
+  "invoiceWhatsAppMessageId": {
+    "type": "string | null",
+    "default": null,
+    "description": "Meta message ID returned when WhatsApp accepts invoice delivery.",
+    "writer": "Cloud Function (invoicing — Phase 3)",
+    "reader": "Cloud Functions"
+  },
+
+  "invoiceSendOwner": {
+    "type": "string | null",
+    "default": null,
+    "description": "Owner token fencing invoice delivery recovery.",
+    "writer": "Cloud Function (invoicing — Phase 3)",
+    "reader": "Cloud Functions"
+  },
+
+  "invoiceSendLeaseUntil": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Expiry of the recoverable invoice delivery claim.",
+    "writer": "Cloud Function (invoicing — Phase 3)",
+    "reader": "Cloud Functions"
   },
 
   "offerExpiresAt": {
@@ -243,10 +323,10 @@
 
   "refundedAmountPaise": {
     "type": "number | null",
-    "unit": "INR (integer paise recommended)",
+    "unit": "integer paise",
     "default": null,
-    "description": "Amount refunded to the customer (Razorpay Refunds API, no-driver-found case only) or to the driver's wallet (customer-cancel case). Set by the cancellation handler.",
-    "writer": "Cloud Function ONLY (cancellation handler)",
+    "description": "Customer booking-fee amount confirmed refunded by Razorpay for the no-driver-found case. This field does not represent a future driver-wallet credit.",
+    "writer": "Cloud Function (Razorpay refund.processed webhook handler — Phase 3)",
     "reader": "admin"
   },
 

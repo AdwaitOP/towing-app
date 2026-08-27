@@ -8,11 +8,14 @@
   "main": "src/index.js",
   "scripts": {
     "shell": "firebase functions:shell",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test:phase2": "node ../../scripts/testFare.js",
+    "test:phase3": "node ../../scripts/testPhase3.js"
   },
   "dependencies": {
     "firebase-admin": "^14.3.0",
-    "firebase-functions": "^7.3.2"
+    "firebase-functions": "^7.3.2",
+    "pdfkit": "^0.15.0"
   },
   "private": true
 }

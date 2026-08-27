@@ -52,6 +52,7 @@ Document ID = Firestore auto-ID. Created by `createJobAndQuote()` (Phase 3), wri
 | `destCoords` | `map {lat, lng}` | — | From WhatsApp location pin |
 | `requestedTruckType` | `string` | — | Customer's requested towing category (flatbed \| pulling) |
 | `distanceKm` | `number` | — | Haversine straight-line distance |
+| `pricingTier` | `number` enum | — | `1 \| 2 \| 3`, returned by the trusted Phase 2 commission calculation and fixed at creation |
 | `bookingFeePaise` | `number` | — | Platform fee (paise). **Never the full fare.** |
 | `driverCommissionPaise` | `number` | — | Deducted from driver wallet on accept (paise) |
 | `estimatedFarePaise` | `number` | — | Informational only. Customer pays driver directly. |
@@ -59,14 +60,23 @@ Document ID = Firestore auto-ID. Created by `createJobAndQuote()` (Phase 3), wri
 | `offeredTo` | `string \| null` | `null` | UID of driver currently being offered the job |
 | `assignedDriver` | `string \| null` | `null` | UID of driver who accepted |
 | `channel` | `string` enum | — | `whatsapp \| phone` |
-| `createdByAdmin` | `string \| null` | `null` | Admin UID for phone-originated bookings |
+| `createdByAdmin` | `string \| null` | `null` | Reserved for Phase 6 phone-booking attribution. Phase 3's six-argument `createJobAndQuote` initializes it to `null`; it does not receive an admin UID. |
 | `razorpayPaymentLinkId` | `string \| null` | `null` | — |
 | `razorpayPaymentLinkUrl` | `string \| null` | `null` | Razorpay short_url returned on link creation |
+| `paymentLinkProvisioningOwner` | `string \| null` | `null` | Owner token for recoverable Payment Link provisioning |
+| `paymentLinkProvisioningLeaseUntil` | `Timestamp \| null` | `null` | Expiry for the provisioning owner; stale work may be reclaimed |
 | `razorpayPaymentId` | `string \| null` | `null` | Stored for refund operations |
 | `paymentConfirmedAt` | `Timestamp \| null` | `null` | Timestamp when payment was verified and persisted |
 | `invoiceNumber` | `string \| null` | `null` | Sequential GST invoice number |
 | `invoiceUrl` | `string \| null` | `null` | Storage URL for invoice PDF |
-| `invoiceSentAt` | `Timestamp \| null` | `null` | Written only after successful WhatsApp invoice delivery |
+| `invoiceStoragePath` | `string \| null` | `null` | Exact private object path `invoices/{jobId}.pdf` |
+| `invoiceIssueDateIst` | `string \| null` | `null` | Immutable `YYYY-MM-DD` invoice issue date in IST |
+| `invoiceIssuedAt` | `Timestamp \| null` | `null` | Instant paired with the immutable issue date |
+| `invoiceSentAt` | `Timestamp \| null` | `null` | Written after Meta accepts the outbound invoice message; it does not prove recipient delivery |
+| `invoiceWhatsAppMediaId` | `string \| null` | `null` | Meta media ID accepted for the private PDF upload |
+| `invoiceWhatsAppMessageId` | `string \| null` | `null` | Meta message ID returned when invoice delivery is accepted |
+| `invoiceSendOwner` | `string \| null` | `null` | Owner token for the recoverable invoice send lease |
+| `invoiceSendLeaseUntil` | `Timestamp \| null` | `null` | Expiry of the invoice send lease |
 | `offerExpiresAt` | `Timestamp \| null` | `null` | Cloud Task scheduled for this time |
 | `requestId` | `string` | — | Client UUID for accept idempotency |
 | `cancelledBy` | `string \| null` | `null` | `customer \| driver \| system` |
@@ -74,7 +84,7 @@ Document ID = Firestore auto-ID. Created by `createJobAndQuote()` (Phase 3), wri
 | `cancellationReason` | `string \| null` | `null` | — |
 | `razorpayRefundId` | `string \| null` | `null` | — |
 | `refundConfirmedAt` | `Timestamp \| null` | `null` | — |
-| `refundedAmountPaise` | `number \| null` | `null` | Paise |
+| `refundedAmountPaise` | `number \| null` | `null` | Customer booking-fee refund confirmed by Razorpay, in integer paise; not a driver-wallet credit |
 | `forfeitedAmount` | `number \| null` | `null` | Paise |
 | `createdAt` | `Timestamp` | — | — |
 | `updatedAt` | `Timestamp` | — | — |
@@ -94,9 +104,10 @@ Document ID = customer phone in E.164 format. Managed exclusively by Cloud Funct
 | `requestedTruckType` | `string \| null` | `flatbed \| pulling` |
 | `jobId` | `string \| null` | Set once job is created |
 | `processingMessageId` | `string \| null` | Identifies which Meta message currently owns the conversation-processing claim |
+| `processingOwnerToken` | `string \| null` | Fences completion so a stale invocation cannot mutate a reclaimed session |
 | `processingLeaseUntil` | `Timestamp \| null` | Allows another invocation to reclaim an abandoned claim after expiry |
 | `lastProcessedMessageId` | `string \| null` | For WhatsApp webhook idempotency / outbound retries |
-| `pendingReply` | `map \| null` | Serialized outbound WhatsApp reply used to recover/resend after an external send failure |
+| `pendingReply` | `map \| null` | Serialized recoverable work. `kind` is `text`, `job_quote`, or `cancel_unpaid`; every record carries its originating `messageId`. |
 | `updatedAt` | `Timestamp` | — |
 
 ---
@@ -107,8 +118,39 @@ Idempotency log. Document ID = WhatsApp message ID or driver `requestId` UUID.
 
 | Field | Type | Notes |
 |---|---|---|
-| `processedAt` | `Timestamp` | When this request was first handled |
-| `type` | `string` | `whatsapp_message \| accept_job` |
+| `status` | `string` enum | `in_progress \| completed` |
+| `type` | `string` | Request category, including `whatsapp_message` and `razorpay_webhook` |
+| `ownerToken` | `string` | Random lease owner; only this owner may complete or release the record |
+| `claimedAt` | `Timestamp` | When the current owner claimed or reclaimed processing |
+| `leaseUntil` | `Timestamp \| null` | Active lease expiry; null after completion |
+| `processedAt` | `Timestamp \| null` | Written when owned work completes |
+
+---
+
+### `driver_otps/{phoneNumber}`
+
+Document ID = the driver's normalized E.164 WhatsApp phone number. Managed
+exclusively by Cloud Functions. The OTP itself is never stored.
+
+| Field | Type | Notes |
+|---|---|---|
+| `challengeId` | `string` | Random identifier replaced on every permitted resend |
+| `hash` | `string` | Scrypt-derived OTP hash; never plaintext |
+| `salt` | `string` | Random per-challenge salt |
+| `expiresAt` | `Timestamp` | Challenge expiry computed from `otpPolicy.otpExpirySeconds` |
+| `attempts` | `number` | Verification attempts against the current challenge |
+| `consumedAt` | `Timestamp \| null` | Set once after successful verification |
+| `lastSentAt` | `Timestamp` | Enforces resend cooldown |
+| `sendWindowStartedAt` | `Timestamp` | Start of the current abuse-accounting window |
+| `sendCount` | `number` | Permitted sends in the current window; resends do not reset it |
+| `blockedUntil` | `Timestamp \| null` | Send block set after the current window reaches its configured maximum |
+| `verifiedUid` | `string \| null` | Firebase Auth UID associated when the unchanged challenge is consumed; cleared when a resend replaces the challenge |
+
+Successful verification consumes the unchanged challenge before Firebase Auth
+lookup/creation and custom-token minting. If Auth or token creation then fails,
+that challenge remains consumed and cannot be replayed; the driver must request
+a new OTP after the normal cooldown. Resend replacement preserves the active
+send-window abuse counters.
 
 ---
 
@@ -166,6 +208,24 @@ Single document. Admin-claim read, Cloud Function write only.
 | `registeredAddress` | `string` | Registered business address |
 | `invoiceNumberCounter` | `number` | Incremented atomically by invoicing Cloud Function. **Never edit manually.** |
 | `retention_policy.retention_months` | `number` | DPDP retention window in months. `0` = not configured (no deletion). |
+| `otpPolicy.otpExpirySeconds` | `number` | OTP lifetime. Seed: `300`. |
+| `otpPolicy.resendCooldownSeconds` | `number` | Minimum delay between sends. Seed: `60`. |
+| `otpPolicy.maxSendsPerWindow` | `number` | Permitted sends before blocking. Seed: `5`. |
+| `otpPolicy.sendWindowSeconds` | `number` | Abuse-accounting window. Seed: `900`. |
+| `otpPolicy.blockDurationSeconds` | `number` | Send block duration. Seed: `3600`. |
+| `otpPolicy.maxVerificationAttempts` | `number` | Attempts per challenge; the next attempt is rejected before scrypt or increment. Seed: `5`. |
+| `whatsappOtpTemplate.templateName` | `string` | Meta-approved authentication-template name. Empty is intentionally unconfigured and OTP send fails closed. |
+| `whatsappOtpTemplate.languageCode` | `string` | Approved template language/locale code, such as `en_US`; must match the approved template. |
+
+When a send window or block expires, the next permitted send starts a fresh
+window with a fresh counter. Replacing an OTP challenge never erases the active
+window's abuse counters, while clearing prior-challenge `verifiedUid` metadata.
+These fields are operational configuration, not secrets. `OTP_PEPPER` is
+supplied through Secret Manager and must not appear in this document.
+
+The WhatsApp OTP template identity is non-secret deployment configuration. The
+OTP plaintext is never stored; it exists only long enough to derive the scrypt
+hash and populate the outbound authentication-template parameters.
 
 ---
 

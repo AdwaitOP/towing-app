@@ -54,11 +54,16 @@ Order matters — phases 1–4 are strictly sequential (each depends on the last
 **Scope:**
 - The shared `createJobAndQuote(jobId, customerPhone, pickupCoords, destCoords, requestedTruckType, channel)` function — built here, called from here by the WhatsApp flow, and reused (not rebuilt) by Phase 6's phone-booking screen
 - WhatsApp webhook: signature verification, idempotency via `processed_requests`, State 1 (pickup) through State 5, the cancel command
-- Driver OTP send/verify Cloud Functions (WhatsApp-delivered)
+- Driver OTP send/verify Cloud Functions delivered through an approved Meta authentication template configured in `business_config/main.whatsappOtpTemplate`
 - Razorpay webhook: signature verification, booking-fee success → triggers Dispatch Logic (Phase 4) + GST Invoicing, refund-success handling
 - GST Invoicing: PDF generation scoped to the booking fee only, sequential numbering via atomic transaction on `business_config.invoiceNumberCounter`, delivered as a WhatsApp document
 
 **Explicitly excluded:** the two-stage driver-selection / offer-cascade logic itself (Phase 4 owns everything past "payment succeeded, hand off to dispatch")
+
+**Production traffic gate:** do not route live payment traffic to Phase 3 until
+Phase 4 provides a durable consumer or backlog reconciler for every
+`pending_offer` job. `triggerDispatch(jobId)` remains a boundary, not a Phase 3
+dispatch implementation.
 
 **Definition of done:**
 - [ ] WhatsApp and Razorpay webhook signatures verified on every request
@@ -66,10 +71,11 @@ Order matters — phases 1–4 are strictly sequential (each depends on the last
 - [ ] Reclaimable per-session processing lease implemented (owner + expiry)
 - [ ] Preallocated `jobId` persisted in session before external Razorpay work
 - [ ] Retries reuse the same `jobId` to prevent duplicate logical bookings
-- [ ] Driver OTP delivered via WhatsApp, not Firebase Phone Auth SMS
+- [ ] Driver OTP delivered via an approved WhatsApp authentication template, not free-form text or Firebase Phone Auth SMS; missing template configuration fails closed
+- [ ] Driver OTP expiry, resend cooldown, send-window blocking, and per-challenge verification attempts read `business_config/main.otpPolicy`; the OTP pepper remains in Secret Manager
 - [ ] The platform's Razorpay integration only ever collects the booking fee and driver commission — the full towing fare never flows through the platform
 - [ ] GST invoice PDFs are generated only for the booking fee amount — never for the full tow fare
-- [ ] Invoice numbers are assigned via an atomic Firestore transaction — sequential, no gaps or duplicates
+- [ ] Each logical paid job receives one immutable invoice number via an atomic Firestore transaction; retries cannot increment the counter twice (external failures can still leave operational numbering gaps)
 - [ ] (partial — fully verified only after Phase 6) WhatsApp-originated and phone-originated bookings both call the same `createJobAndQuote()` function
 
 ---
