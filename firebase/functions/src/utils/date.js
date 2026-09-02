@@ -36,4 +36,8 @@ function getIstDateString(date = new Date()) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-module.exports = { IST_TIME_ZONE, getIstHour, getIstDateString };
+function getIstMonthString(date = new Date()) {
+  return getIstDateString(date).slice(0, 7);
+}
+
+module.exports = { IST_TIME_ZONE, getIstHour, getIstDateString, getIstMonthString };

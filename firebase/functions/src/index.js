@@ -44,7 +44,29 @@ exports.razorpayWebhook = onRequest({
   secrets: ['RAZORPAY_WEBHOOK_SECRET', 'WHATSAPP_ACCESS_TOKEN'],
 }, handleRazorpayWebhook);
 
-// ── Phase 4 (placeholder) ────────────────────────────────────────────────────
+// ── Phase 4 Stage 2 durable consumer and backlog/retry recovery ───────────────
+const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { productionRecovery } = require('./dispatch/dispatchRecovery');
+const { logger } = require('firebase-functions');
+
+exports.dispatchPendingJob = onDocumentWritten({
+  document: 'jobs/{jobId}', retry: true, secrets: ['OLA_MAPS_API_KEY'],
+}, async event => {
+  const result = await productionRecovery().consumePendingJob(event);
+  if (result) logger.info('Dispatch consumer result', {
+    dispatched: result.dispatched === true, reason: result.reason || null, state: result.state || null,
+  });
+});
+exports.reconcilePendingDispatch = onSchedule({
+  // Required deployment setting: empty is deliberately not a deployable schedule.
+  schedule: process.env.DISPATCH_RECONCILE_SCHEDULE || '',
+  timeZone: 'Asia/Kolkata', secrets: ['OLA_MAPS_API_KEY'],
+}, async () => {
+  logger.info('Dispatch recovery result', await productionRecovery().reconcilePendingJobs());
+});
+
+// Later Phase 4 stages remain excluded.
 // const { acceptJob } = require('./dispatch/acceptJob');
 // const { cancelJob } = require('./dispatch/cancelJob');
 // const { offerTimeout } = require('./dispatch/offerTimeout');
