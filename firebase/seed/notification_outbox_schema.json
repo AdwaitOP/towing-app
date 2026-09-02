@@ -1,0 +1,85 @@
+{
+  "_comment": "Schema reference for backend-only notification_outbox/{eventId}. The document ID is a deterministic semantic event identity. External delivery is at-least-once, never exactly-once.",
+  "_spec_ref": "docs/phase4_decisions.md P4-D018, P4-D028, P4-D043 and §notification_outbox/{eventId}",
+  "_invariants": "Important customer lifecycle state commits the outbox record transactionally with the domain transition. eventId is deterministic per occurrence and every allowed event has one exact resource/status/payload binding. job_accepted eventId includes offerId to handle the same job accepting a second driver after a pre-tow cancellation; all other events occur at most once per job/refund. providerMessageId/sentAt prove provider acceptance only, not recipient delivery. Payloads are versioned, validated, and contain no customer phone, credentials, secrets, or raw provider bodies.",
+  "_state_machine": {
+    "nonterminalStates": ["pending", "in_progress", "retry_wait"],
+    "terminalStates": ["sent", "failed_terminal"],
+    "legalTransitions": ["pending->in_progress", "retry_wait->in_progress", "in_progress->sent", "in_progress->retry_wait", "in_progress->failed_terminal"]
+  },
+  "_event_contract": {
+    "eventIdFormats": {
+      "job_accepted": "job_accepted:{jobId}:{offerId}",
+      "job_in_progress": "job_in_progress:{jobId}",
+      "job_completed": "job_completed:{jobId}",
+      "job_cancelled_customer": "job_cancelled_customer:{jobId}",
+      "job_cancelled_system": "job_cancelled_system:{jobId}",
+      "refund_confirmed": "refund_confirmed:{jobId}"
+    },
+    "occurrenceSafetyNote": "job_accepted eventId includes offerId because an accepted-driver pre-tow cancellation followed by a second acceptance creates a second legitimate notification occurrence for the same job. All other event types occur at most once per job/refund and use {eventType}:{jobId}.",
+    "eventTypes": ["job_accepted", "job_in_progress", "job_completed", "job_cancelled_customer", "job_cancelled_system", "refund_confirmed"],
+    "resourceTypes": ["job", "refund_request"],
+    "channel": "whatsapp",
+    "payloadVersion": 1,
+    "payloadExactKeys": ["jobId", "jobStatus", "refundAmountPaise"],
+    "eventBindings": {
+      "job_accepted": { "resourceType": "job", "resourceId": "jobId", "jobStatus": "accepted", "refundAmountPaise": null },
+      "job_in_progress": { "resourceType": "job", "resourceId": "jobId", "jobStatus": "in_progress", "refundAmountPaise": null },
+      "job_completed": { "resourceType": "job", "resourceId": "jobId", "jobStatus": "completed", "refundAmountPaise": null },
+      "job_cancelled_customer": { "resourceType": "job", "resourceId": "jobId", "jobStatus": "cancelled_customer", "refundAmountPaise": null },
+      "job_cancelled_system": { "resourceType": "job", "resourceId": "jobId", "jobStatus": "cancelled_system", "refundAmountPaise": null },
+      "refund_confirmed": { "resourceType": "refund_request", "resourceId": "jobId", "jobStatus": "cancelled_system", "refundAmountPaise": "positive safe integer exactly equal to confirmed refund amountPaise" }
+    },
+    "futureEvolution": "Any additional event type, resource type, channel, or payload key requires a separately approved schema/version change.",
+    "privacy": "recipientKey is a validated backend contact reference; payload contains no customer phone, coordinates, driver identity, payment identifier, provider response, credential, or secret."
+  },
+  "_recipientKey_contract": {
+    "format": "customer:{jobId}",
+    "resolution": "The backend resolves this opaque reference to the customer's validated WhatsApp contact at send time using the stored job document. The key is never a raw phone number or customer PII in this document.",
+    "authorization": "recipientKey is never used to authorize Firestore access; it is purely a delivery routing token.",
+    "example": "customer:abc123xyz"
+  },
+  "_lastErrorCode_contract": {
+    "allowedCodes": [
+      "provider_unavailable",
+      "provider_rate_limited",
+      "provider_rejected_message",
+      "provider_unknown_error",
+      "recipient_unreachable",
+      "configuration_missing",
+      "internal_error"
+    ],
+    "invariant": "Only safe operational codes from the allowedCodes list are stored. Raw provider bodies, stack traces, customer data, phone numbers, credentials, and secrets are never stored.",
+    "clearOnSent": "lastErrorCode is null when state=sent."
+  },
+
+  "eventId": { "type": "string", "source": "document ID", "required": true, "description": "Deterministic per-occurrence semantic event identity. Format per _event_contract.eventIdFormats: job_accepted uses job_accepted:{jobId}:{offerId}; all other events use {eventType}:{jobId}." },
+  "eventType": { "type": "string", "enum": ["job_accepted", "job_in_progress", "job_completed", "job_cancelled_customer", "job_cancelled_system", "refund_confirmed"], "required": true, "writer": "Cloud Function ONLY" },
+  "resourceType": { "type": "string", "enum": ["job", "refund_request"], "required": true, "description": "Exact domain resource kind from _event_contract; offers are not customer notification resources.", "writer": "Cloud Function ONLY" },
+  "resourceId": { "type": "string", "required": true, "writer": "Cloud Function ONLY" },
+  "channel": { "type": "string", "enum": ["whatsapp"], "required": true, "writer": "Cloud Function ONLY" },
+  "recipientKey": { "type": "string", "required": true, "format": "customer:{jobId}", "description": "Opaque backend recipient routing token resolved to the customer's validated WhatsApp contact at send time. Never a raw phone number in this document. See _recipientKey_contract.", "writer": "Cloud Function ONLY" },
+  "payloadVersion": { "type": "number", "enum": [1], "unit": "positive safe integer", "required": true, "writer": "Cloud Function ONLY" },
+  "payload": {
+    "type": "map",
+    "required": true,
+    "exactKeys": ["jobId", "jobStatus", "refundAmountPaise"],
+    "fields": {
+      "jobId": { "type": "string", "required": true },
+      "jobStatus": { "type": "string", "enum": ["accepted", "in_progress", "completed", "cancelled_customer", "cancelled_system"], "required": true },
+      "refundAmountPaise": { "type": "number | null", "unit": "positive safe integer paise when non-null", "required": true }
+    },
+    "description": "Exact version-1 envelope governed by _event_contract; no extra keys, phone, secrets, or raw provider response.",
+    "writer": "Cloud Function ONLY"
+  },
+  "state": { "type": "string", "enum": ["pending", "in_progress", "sent", "retry_wait", "failed_terminal"], "required": true, "writer": "Cloud Function ONLY" },
+  "ownerToken": { "type": "string | null", "default": null, "required": true, "writer": "Cloud Function ONLY" },
+  "leaseUntil": { "type": "timestamp | null", "default": null, "required": true, "writer": "Cloud Function ONLY" },
+  "nextAttemptAt": { "type": "timestamp | null", "default": null, "required": true, "writer": "Cloud Function ONLY" },
+  "attemptCount": { "type": "number", "unit": "non-negative safe integer", "default": 0, "required": true, "writer": "Cloud Function ONLY" },
+  "providerMessageId": { "type": "string | null", "default": null, "required": true, "writer": "Cloud Function ONLY" },
+  "lastErrorCode": { "type": "string | null", "default": null, "required": true, "enum": ["provider_unavailable", "provider_rate_limited", "provider_rejected_message", "provider_unknown_error", "recipient_unreachable", "configuration_missing", "internal_error", null], "description": "Bounded safe operational code from _lastErrorCode_contract.allowedCodes only. Null when state=sent or before any error. Raw provider bodies, stack traces, credentials, or PII are never stored.", "writer": "Cloud Function ONLY" },
+  "createdAt": { "type": "timestamp", "required": true, "writer": "Cloud Function ONLY" },
+  "updatedAt": { "type": "timestamp", "required": true, "writer": "Cloud Function ONLY" },
+  "sentAt": { "type": "timestamp | null", "default": null, "required": true, "description": "Provider-acceptance completion timestamp; not proof of delivery.", "writer": "Cloud Function ONLY" }
+}

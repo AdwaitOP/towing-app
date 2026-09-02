@@ -1,0 +1,84 @@
+{
+  "_comment": "Schema reference for backend-only jobs/{jobId}/dispatch_runs/{generationId}. The deterministic generationId names one finite search generation.",
+  "_spec_ref": "docs/phase4_decisions.md P4-D006, P4-D007, P4-D008, P4-D013, P4-D026, P4-D033, P4-D034 and §jobs/{jobId}/dispatch_runs/{generationId}",
+  "_invariants": "Candidate driverId values, attemptedDriverIds, and excludedDriverIds are unique within a generation; candidates, attemptedDriverIds, and excludedDriverIds each contain at most 30 entries; authoritative nextCandidateIndex never decreases and never exceeds candidates.length. assigned is nonterminal. Accepted-driver cancellation preserves nextCandidateIndex exactly and preserves attempted/excluded evidence. Dispatch worker ownership exists only on jobs.dispatchLeaseOwner and jobs.dispatchLeaseUntil; this schema has no owner or lease fields. Exhausted is legal only after every persisted candidate has a terminal non-accepted outcome and no eligible untried candidate remains under policySnapshot. Provider/config failure is not exhaustion.",
+  "_state_machine": {
+    "nonterminalStates": ["active", "assigned"],
+    "terminalStates": ["exhausted", "cancelled_customer", "completed", "superseded"],
+    "legalTransitions": [
+      "active->assigned",
+      "assigned->active",
+      "active->exhausted",
+      "active->cancelled_customer",
+      "assigned->cancelled_customer",
+      "assigned->completed",
+      "active->superseded"
+    ],
+    "finalizationRule": "finalizedAt is null for active and assigned. It is set exactly once when entering exhausted, cancelled_customer, completed, or superseded and never cleared.",
+    "supersededNote": "assigned->superseded is not a legal Stage 1 transition. No complete authoritative operation exists for safely superseding an active accepted assignment while preserving all job, offer, driver, financial, and run domain state. Only active->superseded is permitted for explicitly invalidating a generation that has not yet produced an accepted driver."
+  },
+  "_accepted_driver_cancellation": {
+    "status": "assigned->active",
+    "currentOfferId": "set null",
+    "candidateOutcome": "accepted->driver_cancelled",
+    "candidateDriver": "remains in attemptedDriverIds and is added to excludedDriverIds if not already present",
+    "generation": "unchanged",
+    "nextCandidateIndex": "preserved exactly; must not advance, decrease, or restart",
+    "finalizedAt": "remains null",
+    "updatedAt": "set to transaction server time",
+    "workerLeaseOwnership": "job-only dispatchLeaseOwner and dispatchLeaseUntil; no dispatch-run owner/lease fields"
+  },
+  "_ola_authorization": "policySnapshot contains immutable search/ranking evidence only and never contains olaMonthlyPairCap. Before every future Matrix pair reservation and provider attempt, runtime must revalidate the current dispatch_config/main cap and circuit-breaker state. A recovered run cannot authorize against an older observed cap.",
+
+  "jobId": { "type": "string", "required": true, "writer": "Cloud Function ONLY" },
+  "generation": { "type": "number", "unit": "positive safe integer", "required": true, "writer": "Cloud Function ONLY" },
+  "status": {
+    "type": "string",
+    "enum": ["active", "assigned", "exhausted", "cancelled_customer", "completed", "superseded"],
+    "required": true,
+    "description": "assigned is explicitly nonterminal and may return to active after accepted-driver cancellation. Terminal status plus finalizedAt records why continuation became permanently unnecessary or impossible.",
+    "writer": "Cloud Function ONLY"
+  },
+  "policyVersion": { "type": "number", "unit": "positive safe integer", "required": true, "description": "Version of immutable search/ranking policy only; never provider-spend authorization.", "writer": "Cloud Function ONLY" },
+  "policySnapshot": {
+    "type": "map",
+    "required": true,
+    "exactKeys": ["locationFreshnessSeconds", "radiusKmSequence", "maxUniqueCandidatesPerGeneration", "maxMatrixShortlistPerRound", "rankingPrimary", "rankingSecondary", "rankingTieBreak", "olaFailureMode"],
+    "fields": {
+      "locationFreshnessSeconds": { "type": "number", "unit": "positive safe integer", "required": true },
+      "radiusKmSequence": { "type": "array<number>", "required": true },
+      "maxUniqueCandidatesPerGeneration": { "type": "number", "unit": "positive safe integer", "maximum": 30, "required": true },
+      "maxMatrixShortlistPerRound": { "type": "number", "unit": "positive safe integer", "required": true },
+      "rankingPrimary": { "type": "string", "enum": ["ola_eta_seconds"], "required": true },
+      "rankingSecondary": { "type": "string", "enum": ["ola_distance_meters"], "required": true },
+      "rankingTieBreak": { "type": "string", "enum": ["driver_uid"], "required": true },
+      "olaFailureMode": { "type": "string", "enum": ["bounded_retry_then_haversine_degraded"], "required": true }
+    },
+    "description": "Immutable search/config snapshot used to prove the bounded search that actually ran. It contains neither provider authorization/cost caps nor credentials/raw provider responses.",
+    "writer": "Cloud Function ONLY"
+  },
+  "candidates": {
+    "type": "array<map>",
+    "maximumItems": 30,
+    "required": true,
+    "exactItemKeys": ["driverId", "roundIndex", "haversineDistanceKm", "matrixEtaSeconds", "matrixDistanceMeters", "rankingMode", "outcome", "reasonCode"],
+    "itemFields": {
+      "driverId": { "type": "string", "required": true },
+      "roundIndex": { "type": "number", "unit": "non-negative safe integer", "required": true },
+      "haversineDistanceKm": { "type": "number", "unit": "non-negative finite km", "required": true },
+      "matrixEtaSeconds": { "type": "number | null", "unit": "non-negative finite seconds", "required": true },
+      "matrixDistanceMeters": { "type": "number | null", "unit": "non-negative finite meters", "required": true },
+      "rankingMode": { "type": "string", "enum": ["ola", "haversine_degraded"], "required": true },
+      "outcome": { "type": "string", "enum": ["pending", "offered", "declined", "expired", "accepted", "driver_cancelled", "skipped"], "required": true },
+      "reasonCode": { "type": "string | null", "required": true, "description": "Safe operational code only; no provider body, secret, or personal data." }
+    },
+    "writer": "Cloud Function ONLY"
+  },
+  "nextCandidateIndex": { "type": "number", "unit": "non-negative safe integer", "required": true, "writer": "Cloud Function ONLY" },
+  "attemptedDriverIds": { "type": "array<string>", "maximumItems": 30, "uniqueItems": true, "required": true, "writer": "Cloud Function ONLY" },
+  "excludedDriverIds": { "type": "array<string>", "maximumItems": 30, "uniqueItems": true, "required": true, "writer": "Cloud Function ONLY" },
+  "currentOfferId": { "type": "string | null", "default": null, "required": true, "writer": "Cloud Function ONLY" },
+  "createdAt": { "type": "timestamp", "required": true, "writer": "Cloud Function ONLY" },
+  "updatedAt": { "type": "timestamp", "required": true, "writer": "Cloud Function ONLY" },
+  "finalizedAt": { "type": "timestamp | null", "default": null, "required": true, "description": "Null for active/assigned. Set exactly once only for exhausted, cancelled_customer, completed, or superseded.", "writer": "Cloud Function ONLY" }
+}

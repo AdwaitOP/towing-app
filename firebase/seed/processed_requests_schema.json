@@ -1,0 +1,24 @@
+{
+  "_comment": "Schema reference for processed_requests/{requestId}. Existing Phase 3 webhook receipts remain compatible; Phase 4 client mutation receipts require the actor/input/result binding fields below.",
+  "_spec_ref": "docs/phase4_decisions.md P4-D012, P4-D013, P4-D015, P4-D016 and §processed_requests/{id} additions",
+  "_phase4_invariant": "For accept, decline, driver_cancel, start_job, and complete_job, the document ID is the client requestId and must bind actorUid, operation, resourceId, payloadHash, and stored result. Reuse with any different binding fails closed. Domain/financial completion and the completed receipt are committed in the same transaction.",
+  "_phase4_required_fields": ["requestId", "status", "type", "ownerToken", "claimedAt", "leaseUntil", "processedAt", "actorUid", "operation", "resourceId", "payloadHash", "result"],
+  "_phase4_state_machine": {
+    "states": ["in_progress", "completed"],
+    "legalTransitions": ["in_progress->completed"],
+    "terminalStates": ["completed"]
+  },
+
+  "requestId": { "type": "string", "source": "document ID", "required": true },
+  "status": { "type": "string", "enum": ["in_progress", "completed"], "required": true, "writer": "Cloud Function ONLY" },
+  "type": { "type": "string", "required": true, "description": "Legacy/general request category, including whatsapp_message, razorpay_webhook, and phase4_client_mutation.", "writer": "Cloud Function ONLY" },
+  "ownerToken": { "type": "string | null", "default": null, "writer": "Cloud Function ONLY" },
+  "claimedAt": { "type": "timestamp", "required": true, "writer": "Cloud Function ONLY" },
+  "leaseUntil": { "type": "timestamp | null", "default": null, "writer": "Cloud Function ONLY" },
+  "processedAt": { "type": "timestamp | null", "default": null, "writer": "Cloud Function ONLY" },
+  "actorUid": { "type": "string | null", "default": null, "requiredForPhase4": true, "description": "Required non-null and equal to request.auth.uid for every Phase 4 authenticated client mutation.", "writer": "Cloud Function ONLY" },
+  "operation": { "type": "string | null", "enum": ["accept", "decline", "driver_cancel", "start_job", "complete_job", null], "default": null, "requiredForPhase4": true, "writer": "Cloud Function ONLY" },
+  "resourceId": { "type": "string | null", "default": null, "requiredForPhase4": true, "description": "Required non-null canonical immutable input identity binding the job and, when applicable, offer (for example jobId/offerId).", "writer": "Cloud Function ONLY" },
+  "payloadHash": { "type": "string | null", "default": null, "requiredForPhase4": true, "description": "Required non-null hash of the canonical immutable input. Different input under a reused requestId fails closed.", "writer": "Cloud Function ONLY" },
+  "result": { "type": "map | null", "default": null, "requiredForCompletedPhase4": true, "description": "Stable stored result returned for a binding-identical retry.", "writer": "Cloud Function ONLY" }
+}

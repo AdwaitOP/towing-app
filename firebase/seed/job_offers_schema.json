@@ -1,0 +1,61 @@
+{
+  "_comment": "Schema reference for the top-level job_offers/{offerId} collection. This is the sanitized authoritative driver-facing offer and assignment projection.",
+  "_spec_ref": "docs/phase4_decisions.md P4-D013, P4-D017, P4-D018, P4-D019, P4-D022, P4-D034 and §job_offers/{offerId}",
+  "_driver_visible_exact_allowlist": ["jobId", "driverId", "dispatchGeneration", "candidateIndex", "roundIndex", "status", "offeredAt", "expiresAt", "resolvedAt", "resolutionReason", "acceptedAt", "inProgressAt", "completedAt", "timeoutTaskId", "timeoutTaskState", "acceptRequestId", "cancellationPolicySnapshot", "pickupCoords", "destCoords", "requestedTruckType", "pickupRoutedDistanceMeters", "pickupEtaSeconds", "estimatedFarePaise", "driverCommissionPaise", "createdAt", "updatedAt"],
+  "_privacy_boundary": "Never copy customerPhone, Razorpay/payment metadata, invoice internals, processed-request receipt internals, payload hashes, dispatch leases/errors, refund metadata, provider response bodies, or unrelated backend/admin fields into this projection. acceptRequestId is the sole approved request-ID exception: it is the opaque ID supplied by this target driver for the winning acceptance, not a processed_requests receipt or another actor's input.",
+  "_retention_visibility": "The target driver may read the exact historical pickup/destination coordinates and other fields in this sanitized offer until an approved future operational-retention policy deletes the offer. Stage 1 defines no deletion period.",
+  "_state_machine": {
+    "nonterminalStates": ["offered", "accepted", "in_progress"],
+    "terminalStates": ["completed", "declined", "expired", "cancelled_customer", "cancelled_driver", "superseded"],
+    "legalTransitions": ["offered->accepted", "accepted->in_progress", "in_progress->completed", "offered->declined", "offered->expired", "offered->cancelled_customer", "offered->superseded", "accepted->cancelled_customer", "accepted->cancelled_driver", "in_progress->cancelled_customer"]
+  },
+
+  "jobId": { "type": "string", "required": true, "writer": "Cloud Function ONLY", "reader": "target driver, admin" },
+  "driverId": { "type": "string", "required": true, "writer": "Cloud Function ONLY", "reader": "target driver, admin" },
+  "dispatchGeneration": { "type": "number", "unit": "positive safe integer", "required": true, "writer": "Cloud Function ONLY" },
+  "candidateIndex": { "type": "number", "unit": "non-negative safe integer", "required": true, "description": "Zero-based stable sequence within the persisted dispatch-run candidate array.", "writer": "Cloud Function ONLY" },
+  "roundIndex": { "type": "number", "unit": "non-negative safe integer", "required": true, "writer": "Cloud Function ONLY" },
+  "status": {
+    "type": "string",
+    "enum": ["offered", "accepted", "in_progress", "completed", "declined", "expired", "cancelled_customer", "cancelled_driver", "superseded"],
+    "required": true,
+    "writer": "Cloud Function ONLY"
+  },
+  "offeredAt": { "type": "timestamp", "required": true, "writer": "Cloud Function ONLY" },
+  "expiresAt": { "type": "timestamp", "required": true, "description": "Exactly 45 seconds after offeredAt for the offered state.", "writer": "Cloud Function ONLY" },
+  "resolvedAt": { "type": "timestamp | null", "default": null, "required": true, "description": "Server timestamp when an offer enters a resolved/terminal offer state.", "writer": "Cloud Function ONLY" },
+  "resolutionReason": { "type": "string | null", "enum": ["declined_by_driver", "offer_expired", "customer_cancelled", "driver_cancelled", "superseded", null], "default": null, "required": true, "description": "Exact reason paired with resolvedAt. accepted-driver cancellation writes driver_cancelled.", "writer": "Cloud Function ONLY" },
+  "acceptedAt": { "type": "timestamp | null", "default": null, "required": true, "writer": "Cloud Function ONLY" },
+  "inProgressAt": { "type": "timestamp | null", "default": null, "required": true, "writer": "Cloud Function ONLY" },
+  "completedAt": { "type": "timestamp | null", "default": null, "required": true, "writer": "Cloud Function ONLY" },
+  "timeoutTaskId": { "type": "string | null", "default": null, "required": true, "description": "Durable future task identity only; Stage 1 creates no task.", "writer": "Cloud Function ONLY" },
+  "timeoutTaskState": { "type": "string", "enum": ["pending", "enqueued", "not_required"], "default": "pending", "required": true, "writer": "Cloud Function ONLY" },
+  "acceptRequestId": { "type": "string | null", "default": null, "required": true, "description": "Approved sanitized exception containing only the target driver's opaque winning acceptance requestId; no receipt payload/hash/result is exposed.", "writer": "Cloud Function ONLY" },
+  "cancellationPolicySnapshot": {
+    "type": "map | null",
+    "default": null,
+    "required": true,
+    "exactKeysWhenPresent": ["version", "timezone", "roundingMode", "freeCancellationsPerMonth", "forfeitPctByCount", "banThresholdCount", "banDurationDays", "capturedAt"],
+    "fields": {
+      "version": { "type": "number", "unit": "positive safe integer", "required": true },
+      "timezone": { "type": "string", "enum": ["Asia/Kolkata"], "required": true },
+      "roundingMode": { "type": "string", "enum": ["HALF_UP"], "required": true },
+      "freeCancellationsPerMonth": { "type": "number", "unit": "non-negative safe integer", "required": true },
+      "forfeitPctByCount": { "type": "map<string, non-negative safe integer percent>", "required": true },
+      "banThresholdCount": { "type": "number", "unit": "positive safe integer", "required": true },
+      "banDurationDays": { "type": "number", "unit": "positive safe integer", "required": true },
+      "capturedAt": { "type": "timestamp", "required": true }
+    },
+    "description": "Null before acceptance; complete immutable financial-policy snapshot written atomically on acceptance.",
+    "writer": "Cloud Function ONLY"
+  },
+  "pickupCoords": { "type": "map", "exactKeys": ["lat", "lng"], "fields": { "lat": { "type": "number", "required": true }, "lng": { "type": "number", "required": true } }, "required": true, "writer": "Cloud Function ONLY" },
+  "destCoords": { "type": "map", "exactKeys": ["lat", "lng"], "fields": { "lat": { "type": "number", "required": true }, "lng": { "type": "number", "required": true } }, "required": true, "writer": "Cloud Function ONLY" },
+  "requestedTruckType": { "type": "string", "enum": ["flatbed", "pulling"], "required": true, "writer": "Cloud Function ONLY" },
+  "pickupRoutedDistanceMeters": { "type": "number | null", "unit": "non-negative finite meters", "default": null, "required": true, "writer": "Cloud Function ONLY" },
+  "pickupEtaSeconds": { "type": "number | null", "unit": "non-negative finite seconds", "default": null, "required": true, "writer": "Cloud Function ONLY" },
+  "estimatedFarePaise": { "type": "number", "unit": "non-negative safe integer paise", "required": true, "writer": "Cloud Function ONLY" },
+  "driverCommissionPaise": { "type": "number", "unit": "positive safe integer paise", "required": true, "writer": "Cloud Function ONLY" },
+  "createdAt": { "type": "timestamp", "required": true, "writer": "Cloud Function ONLY" },
+  "updatedAt": { "type": "timestamp", "required": true, "writer": "Cloud Function ONLY" }
+}

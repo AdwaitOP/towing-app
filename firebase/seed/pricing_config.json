@@ -31,6 +31,9 @@
   },
 
   "cancellation_policy": {
+    "version": 1,
+    "timezone": "Asia/Kolkata",
+    "roundingMode": "HALF_UP",
     "free_cancellations_per_month": 1,
     "forfeit_pct_by_count": {
       "2": 20,
@@ -40,6 +43,6 @@
     },
     "ban_threshold_count": 6,
     "ban_duration_days": 7,
-    "_note": "Keys in forfeit_pct_by_count are strings because Firestore map keys are always strings. The cancellation handler looks up by String(monthlyCancelCount.count). The 1st cancellation is penalty-free (0% forfeited) per free_cancellations_per_month = 1; the 6th+ triggers the ban."
+    "_note": "version, timezone, and roundingMode are snapshotted into the accepted offer and used for deterministic cancellation arithmetic. Keys in forfeit_pct_by_count are strings because Firestore map keys are always strings. The 1st cancellation is penalty-free (0% forfeited) per free_cancellations_per_month = 1; the 6th+ triggers the ban."
   }
 }

@@ -1,0 +1,19 @@
+{
+  "_comment": "Seed/reference for dispatch_config/main. Backend-written and admin-readable; not part of business_config.",
+  "_spec_ref": "docs/phase4_decisions.md P4-D005, P4-D006, P4-D007, P4-D008, P4-D009, P4-D010, P4-D025, P4-D026",
+  "_validation": "version, locationFreshnessSeconds, maxUniqueCandidatesPerGeneration, and maxMatrixShortlistPerRound must be positive safe integers; radiusKmSequence must be a strictly increasing non-empty array of positive finite numbers; maxMatrixShortlistPerRound must not exceed maxUniqueCandidatesPerGeneration; ranking and failure-mode strings must equal the locked enums; olaMonthlyPairCap must be null or a positive safe integer; materialized updatedAt must be a Firestore timestamp. Invalid or absent config fails closed operationally, except a null Ola cap deliberately selects Haversine-degraded dispatch.",
+  "_ola_authorization": "olaMonthlyPairCap is mutable current authorization, never an immutable dispatch-run authority. Before every future Matrix pair reservation/provider attempt, runtime must transactionally re-read the current cap/circuit-breaker and reserve current usage. A recovered run cannot use a previously larger or non-null cap after operators reduce or disable it.",
+
+  "version": 1,
+  "locationFreshnessSeconds": 120,
+  "radiusKmSequence": [10, 20, 35],
+  "maxUniqueCandidatesPerGeneration": 30,
+  "maxMatrixShortlistPerRound": 10,
+  "rankingPrimary": "ola_eta_seconds",
+  "rankingSecondary": "ola_distance_meters",
+  "rankingTieBreak": "driver_uid",
+  "olaFailureMode": "bounded_retry_then_haversine_degraded",
+  "olaMonthlyPairCap": null,
+  "updatedAt": null,
+  "_updatedAt_template_sentinel": "The null value is a non-deployable JSON template sentinel. Materialization must replace it with a Firestore server timestamp. No Ola provider call is allowed while olaMonthlyPairCap is null; dispatch remains available through the Haversine-degraded path."
+}

@@ -1,12 +1,63 @@
 {
   "_comment": "Schema reference for the 'jobs' Firestore collection. NOT a live Firestore document. Use as the canonical field-name reference for all phases.",
   "_spec_ref": "towing_dispatch_spec_v9.md §Firestore Collections, §Dispatch Logic, §Cancellation & Refund Policy",
+  "_phase4_compatibility": "Existing Phase 1-3 documents may omit Phase 4 fields. Stage 2 backlog bootstrap must first discover legacy jobs with status==pending_offer without ordering by a new Phase 4 field, because ordered queries omit documents missing that field; it then transactionally materializes only safe workflow defaults. Malformed financial, assignment, or dispatch state fails closed. No destructive migration or reinterpretation of historical financial values is required.",
+  "_accepted_driver_cancellation_atomic_contract": {
+    "guard": {
+      "jobStatus": "accepted",
+      "dispatchState": "assigned",
+      "authenticatedDriver": "must equal assignedDriver",
+      "currentOfferStatus": "accepted",
+      "requestReceiptBinding": "new or identical",
+      "cancellationRequestedAt": "must be null",
+      "cancellationResolutionState": "must equal none",
+      "cancellationResolvedAt": "must be null",
+      "cancelledAt": "must be null",
+      "cancelledBy": "must be null",
+      "cancellationReason": "must be null"
+    },
+    "customerMarkerPrecedence": {
+      "rule": "CUSTOMER_CANCELLATION_MARKER_WINS",
+      "stableResult": "customer_cancellation_in_progress",
+      "nonPenalizing": true,
+      "forbiddenMutations": ["driver_cancel_credit ledger entry", "monthlyCancelCount increment", "strictMode mutation", "bannedUntil mutation", "forfeiture", "pending_offer redispatch", "customer cancellation provenance overwrite"],
+      "resolutionOwner": "Phase 4 customer-cancellation resolver; customer full commission credit semantics remain authoritative"
+    },
+    "raceOrders": {
+      "customerMarkerFirst": "driver cancellation loses and returns customer_cancellation_in_progress without penalty or domain mutation; customer resolver completes customer cancellation",
+      "driverCancellationFirst": "driver policy commits and job returns to pending_offer; later customer cancellation reads the new current state and follows the approved customer-cancellation path"
+    },
+    "jobChanges": {
+      "status": "accepted->pending_offer",
+      "dispatchState": "assigned->ready",
+      "assignedDriver": "set null",
+      "offeredTo": "set null",
+      "currentOfferId": "set null",
+      "offeredAt": "set null",
+      "offerExpiresAt": "set null",
+      "acceptedAt": "set null",
+      "commissionDebitEntryId": "set null",
+      "forfeitedAmount": "overwritten with the forfeiturePaise for that most recent cancellation occurrence (non-authoritative display projection; not cumulative; wallet_entries is sole financial authority)",
+      "dispatchLeaseOwner": "set null",
+      "dispatchLeaseUntil": "set null",
+      "dispatchLastFailure": "set null",
+      "dispatchNextActionAt": "set to transaction server time for immediate same-generation continuation",
+      "updatedAt": "set to transaction server time",
+      "stateVersion": "increment exactly by 1"
+    },
+    "jobPreserved": ["dispatchGeneration", "dispatchRunId", "inProgressAt (must already be null)", "completedAt (must already be null)", "cancelledAt (must remain null)", "immutable booking/pricing/payment/invoice fields", "customer cancellation/refund fields under the complete customer-marker guard"],
+    "offerChanges": ["status accepted->cancelled_driver", "resolvedAt=transaction server time", "resolutionReason=driver_cancelled", "updatedAt=transaction server time"],
+    "driverChanges": ["activeJobId->null", "activeOfferId->null", "updatedAt=transaction server time", "monthly cancellation/strict-mode/ban fields change only according to the snapshotted financial policy"],
+    "dispatchRunChanges": ["status assigned->active", "currentOfferId->null", "cancelling candidate outcome accepted->driver_cancelled", "driver remains attempted and becomes/stays excluded", "nextCandidateIndex preserved exactly", "finalizedAt remains null", "updatedAt=transaction server time"],
+    "financialAndIdempotency": "The future runtime transaction also creates/reuses the deterministic driver_cancel_credit ledger entry and completes the bound processed_requests receipt atomically. Stage 1 defines but does not implement this mutation."
+  },
+  "_no_driver_refund_contract": "Only genuine finite-generation exhaustion may set status=cancelled_system, cancelledBy=system, cancellationReason=no_driver_found, cancelledAt, refundRequestId=jobId, refundState=pending, and refundNextAttemptAt while atomically creating refund_requests/{jobId}. That request durably stores provider-valid refund_no_driver_found_{jobId} and the exact canonical payment/amount hash before provider contact; every provider attempt binds the stored key to X-Refund-Idempotency. Initiation may project submitted, while a reclaimable due provider-fetch reconciler and signed refund.processed transaction race safely to absorbing confirmed; matching provider failed results move to failed_terminal; pending/unavailable fetches remain submitted without provider resubmission and mismatched identity/amount fails closed.",
 
   "jobId": {
     "type": "string",
     "description": "Firestore auto-generated document ID. Also the key for the corresponding invoices/{jobId}.pdf in Storage.",
     "writer": "Cloud Function (createJobAndQuote)",
-    "reader": "assigned driver, admin"
+    "reader": "admin, Cloud Functions"
   },
 
   "customerPhone": {
@@ -18,24 +69,26 @@
 
   "pickupCoords": {
     "type": "map",
+    "exactKeys": ["lat", "lng"],
     "fields": {
-      "lat": { "type": "number" },
-      "lng": { "type": "number" }
+      "lat": { "type": "number", "required": true },
+      "lng": { "type": "number", "required": true }
     },
     "description": "Customer's pickup location as sent via WhatsApp location pin.",
     "writer": "Cloud Function (createJobAndQuote)",
-    "reader": "assigned driver, admin"
+    "reader": "admin, Cloud Functions"
   },
 
   "destCoords": {
     "type": "map",
+    "exactKeys": ["lat", "lng"],
     "fields": {
-      "lat": { "type": "number" },
-      "lng": { "type": "number" }
+      "lat": { "type": "number", "required": true },
+      "lng": { "type": "number", "required": true }
     },
     "description": "Customer's destination location as sent via WhatsApp location pin.",
     "writer": "Cloud Function (createJobAndQuote)",
-    "reader": "assigned driver, admin"
+    "reader": "admin, Cloud Functions"
   },
 
   "requestedTruckType": {
@@ -46,14 +99,14 @@
     ],
     "description": "Customer's requested towing category: 'flatbed' (maps to fareCalculator serviceType 'flatbed') or 'pulling' (maps to fareCalculator serviceType 'standard').",
     "writer": "Cloud Function (createJobAndQuote)",
-    "reader": "assigned driver, admin"
+    "reader": "admin, Cloud Functions"
   },
 
   "distanceKm": {
     "type": "number",
     "description": "Haversine straight-line distance in km from pickup to destination. Used for tier selection and Tier 3 commission formula. NOTE: this is the haversine distance, not the routed distance — the fare estimate applies road_curvature_factor on top.",
     "writer": "Cloud Function (createJobAndQuote via fareCalculator)",
-    "reader": "assigned driver, admin"
+    "reader": "admin, Cloud Functions"
   },
 
   "pricingTier": {
@@ -69,7 +122,7 @@
     "unit": "integer paise",
     "description": "Platform booking fee charged to the customer in integer paise. Tier-based. This is the ONLY amount the platform collects from the customer — never the full tow fare.",
     "writer": "Cloud Function (createJobAndQuote via fareCalculator)",
-    "reader": "assigned driver, admin"
+    "reader": "admin, Cloud Functions"
   },
 
   "driverCommissionPaise": {
@@ -77,7 +130,7 @@
     "unit": "integer paise",
     "description": "Amount in integer paise deducted from the driver's wallet on job acceptance. Tier-based; Tier 3 uses the formula: tier3_driver_commission_base + (per_km_overage_rate * (distanceKm - long_distance_limit_km)).",
     "writer": "Cloud Function (createJobAndQuote via fareCalculator)",
-    "reader": "assigned driver, admin"
+    "reader": "admin, Cloud Functions"
   },
 
   "estimatedFarePaise": {
@@ -85,7 +138,7 @@
     "unit": "integer paise",
     "description": "Estimated full tow fare in integer paise — informational only, never collected by the platform. Shown to customer as 'collected directly by driver'. Calculated by fareCalculator using fare_formula.",
     "writer": "Cloud Function (createJobAndQuote via fareCalculator)",
-    "reader": "assigned driver, customer (via WhatsApp), admin"
+    "reader": "customer (via WhatsApp), admin, Cloud Functions"
   },
 
   "status": {
@@ -103,11 +156,12 @@
     ],
     "description": "Job state machine status. Starts at awaiting_payment. State transitions are enforced inside atomic Cloud Function transactions. The 'cancelled_system' status covers the no-driver-found case after the offer cascade is exhausted.",
     "writer": "Cloud Function ONLY",
-    "reader": "assigned driver (current/offered), admin"
+    "reader": "admin, Cloud Functions"
   },
 
   "offeredTo": {
     "type": "string | null",
+    "default": null,
     "description": "UID of the driver currently being offered this job. Used by the atomic accept-transaction to guard against double-assignment (checks job.status == 'offered' && job.offeredTo == driverId).",
     "writer": "Cloud Function ONLY (dispatch)",
     "reader": "admin, Cloud Functions"
@@ -118,7 +172,7 @@
     "default": null,
     "description": "UID of the driver who accepted the job. Set atomically when the driver accepts. Null until accepted.",
     "writer": "Cloud Function ONLY (accept transaction)",
-    "reader": "assigned driver, admin"
+    "reader": "admin, Cloud Functions"
   },
 
   "channel": {
@@ -133,7 +187,7 @@
     "type": "string | null",
     "default": null,
     "description": "Reserved for the Phase 6 Admin Panel phone-booking attribution. The current Phase 3 six-argument createJobAndQuote initializes this field to null and does not receive an admin UID.",
-    "writer": "Phase 3 createJobAndQuote initializes null; Phase 6 must define the authenticated admin attribution write",
+    "writer": "Cloud Function (Phase 3 createJobAndQuote initializes null; Phase 6 must define the authenticated admin attribution write)",
     "reader": "admin"
   },
 
@@ -265,18 +319,141 @@
     "reader": "Cloud Functions"
   },
 
+  "stateVersion": {
+    "type": "number",
+    "unit": "non-negative safe integer",
+    "default": 0,
+    "description": "Monotonic Phase 4 state-transition fence. Existing Phase 1-3 jobs may omit it; Phase 4 must transactionally initialize a paid pending_offer job to 0 before relying on it.",
+    "writer": "Cloud Function ONLY (Phase 4 domain transactions)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "dispatchGeneration": {
+    "type": "number",
+    "unit": "non-negative safe integer",
+    "default": 0,
+    "description": "Current durable finite search generation. A pre-tow driver cancellation resumes this same generation and excludes that driver rather than resetting candidate history.",
+    "writer": "Cloud Function ONLY (dispatch claim/recovery)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "dispatchState": {
+    "type": "string | null",
+    "enum": ["not_started", "ready", "claimed", "selecting", "retry_wait", "operational_hold", "offered", "assigned", "closed", null],
+    "default": null,
+    "description": "Internal Phase 4 workflow state. Missing/null on a paid legacy pending_offer is treated as ready and materialized transactionally. Provider failure may enter retry_wait or operational_hold but never no_driver_found.",
+    "writer": "Cloud Function ONLY (dispatch/reconciliation transactions)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "dispatchRunId": {
+    "type": "string | null",
+    "default": null,
+    "description": "Deterministic ID of the current jobs/{jobId}/dispatch_runs/{generationId} document.",
+    "writer": "Cloud Function ONLY (dispatch claim/recovery)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "dispatchLeaseOwner": {
+    "type": "string | null",
+    "default": null,
+    "description": "Opaque owner token fencing the current dispatch worker. Never exposed in job_offers.",
+    "writer": "Cloud Function ONLY (dispatch/reconciliation transactions)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "dispatchLeaseUntil": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Reclaimable dispatch-worker lease deadline. Correctness does not depend on a particular lease duration.",
+    "writer": "Cloud Function ONLY (dispatch/reconciliation transactions)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "dispatchNextActionAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Indexed due time for dispatch retry or reconciliation. Null means no automatically due dispatch action under the current state.",
+    "writer": "Cloud Function ONLY (dispatch/reconciliation transactions)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "dispatchLastFailure": {
+    "type": "map | null",
+    "default": null,
+    "exactKeysWhenPresent": ["code", "source", "retryable", "occurredAt"],
+    "fields": {
+      "code": { "type": "string", "required": true },
+      "source": { "type": "string", "required": true },
+      "retryable": { "type": "boolean", "required": true },
+      "occurredAt": { "type": "timestamp", "required": true }
+    },
+    "description": "Operationally visible safe failure reason. It must not contain provider response bodies, credentials, customer data, or stack traces.",
+    "writer": "Cloud Function ONLY (dispatch/reconciliation workers)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "currentOfferId": {
+    "type": "string | null",
+    "default": null,
+    "description": "Current top-level job_offers document. It points to the offered record and remains the current assignment projection after acceptance only until that assignment resolves. Accepted-driver cancellation must clear it; history remains in job_offers.",
+    "writer": "Cloud Function ONLY (offer/accept/lifecycle/cancellation transactions)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "offeredAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Server timestamp when the current offer was atomically published. Valid only while status is offered; offer history remains on job_offers.",
+    "writer": "Cloud Function ONLY (offer transaction)",
+    "reader": "admin, Cloud Functions"
+  },
+
   "offerExpiresAt": {
     "type": "timestamp | null",
     "default": null,
-    "description": "When the current offer to offeredTo expires. A Cloud Task is scheduled for this timestamp to trigger the offer-cascade logic. Never use in-function sleeps.",
+    "description": "When the current offer to offeredTo expires, exactly 45 seconds after offeredAt. Cleared/resolved after the current offer. Future Cloud Task delivery is only an accelerator; reconciliation remains authoritative.",
     "writer": "Cloud Function ONLY (dispatch)",
     "reader": "admin, Cloud Functions"
   },
 
+  "acceptedAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Server timestamp when the current assigned driver atomically accepted. Accepted-driver cancellation clears it before same-generation redispatch; historical acceptance remains in the offer and ledger.",
+    "writer": "Cloud Function ONLY (accept transaction)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "inProgressAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Server timestamp for authenticated assigned-driver accepted -> in_progress transition.",
+    "writer": "Cloud Function ONLY (start-job transaction)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "completedAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Server timestamp for authenticated assigned-driver in_progress -> completed transition.",
+    "writer": "Cloud Function ONLY (complete-job transaction)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "commissionDebitEntryId": {
+    "type": "string | null",
+    "default": null,
+    "description": "Deterministic wallet_entries document ID for the current assignment's commission debit. Accepted-driver cancellation clears this current pointer after the immutable debit/credit ledger evidence is committed.",
+    "writer": "Cloud Function ONLY (accept transaction)",
+    "reader": "admin, Cloud Functions"
+  },
+
   "requestId": {
-    "type": "string",
-    "description": "Client-generated UUID sent by the driver app when tapping ACCEPT JOB. Used as an idempotency key so duplicate accept calls (network retries) are deduplicated. Checked against processed_requests/{requestId}.",
-    "writer": "Driver app (sent as parameter to accept Cloud Function)",
+    "type": "string | null",
+    "default": null,
+    "description": "Legacy schema slot for a winning accept request ID. Phase 4 handlers use actor-and-operation-scoped processed_requests receipts and must not rely on this job field alone.",
+    "writer": "Cloud Function ONLY if retained as an audit projection; driver supplies requestId only as callable input",
     "reader": "Cloud Functions"
   },
 
@@ -292,7 +469,8 @@
   "cancellationReason": {
     "type": "string | null",
     "default": null,
-    "description": "Free-text reason for cancellation, if provided.",
+    "reservedCanonicalValues": ["no_driver_found"],
+    "description": "Reason for cancellation. For the system no-driver/refund workflow it must equal the exact canonical value no_driver_found; arbitrary free text is not legal for that workflow.",
     "writer": "Cloud Function ONLY",
     "reader": "admin"
   },
@@ -302,6 +480,56 @@
     "default": null,
     "description": "Timestamp when the customer requested cancellation. Used to prevent race conditions with incoming payments.",
     "writer": "Cloud Function (messaging — Phase 3)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "cancellationResolutionState": {
+    "type": "string",
+    "enum": ["none", "pending", "resolved"],
+    "default": "none",
+    "description": "Durable Phase 4 resolution state for customer cancellation markers written while a job is offered, accepted, or in_progress. Legacy documents may omit it and are interpreted from cancellationRequestedAt plus current status.",
+    "writer": "Cloud Function ONLY (cancellation resolver transaction)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "cancellationResolvedAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Timestamp after all database-owned cancellation consequences have committed. External notification completion is tracked separately in the outbox.",
+    "writer": "Cloud Function ONLY (cancellation resolver transaction)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "cancelledAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Server timestamp for a terminal customer/system cancellation. Normal accepted-driver self-cancel redispatch is nonterminal and does not set this field.",
+    "writer": "Cloud Function ONLY (cancellation/no-driver transaction)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "refundRequestId": {
+    "type": "string | null",
+    "default": null,
+    "description": "Deterministic refund_requests document ID for approved no_driver_found initiation; exactly jobId. The ADR uses refundRequestId; no competing refundOperationId field is introduced.",
+    "writer": "Cloud Function ONLY (no-driver exhaustion transaction)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "refundState": {
+    "type": "string",
+    "enum": ["none", "pending", "in_progress", "submitted", "confirmed", "retry_wait", "failed_terminal"],
+    "default": "none",
+    "description": "Monotonic job-level projection of the deterministic no-driver refund request. confirmed is absorbing. Worker persistence may reach submitted; authoritative provider failed status moves submitted to failed_terminal; a due reconciler with matching processed status or Stage 9 signed refund.processed handling transactionally converges both job and refund_requests/{jobId} to confirmed, including from failed_terminal if provider processing ultimately succeeds.",
+    "writer": "Cloud Function ONLY (refund initiation/reconciliation transactions; Phase 3 confirmation integration)",
+    "reader": "admin, Cloud Functions"
+  },
+
+  "refundNextAttemptAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Indexed due time for retryable refund initiation/reconciliation work.",
+    "writer": "Cloud Function ONLY (refund worker/reconciler)",
     "reader": "admin, Cloud Functions"
   },
 
@@ -332,9 +560,9 @@
 
   "forfeitedAmount": {
     "type": "number | null",
-    "unit": "INR (integer paise recommended)",
+    "unit": "integer paise",
     "default": null,
-    "description": "Commission amount forfeited by the driver under the cancellation penalty ramp. Pure wallet ledger operation — no Razorpay call.",
+    "description": "Non-authoritative display/legacy projection of the forfeiturePaise for the MOST RECENT accepted-driver cancellation occurrence. wallet_entries is the sole permanent financial authority. It is NOT cumulative across repeated driver acceptance occurrences, NOT used to reconstruct wallet balance, NOT used for idempotency, and NOT used to calculate future cancellation penalties. Overwritten on each accepted-driver cancellation with that occurrence's forfeiturePaise; customer and system transitions must not interpret an old value as current financial authority. Pure wallet ledger operation — no Razorpay call.",
     "writer": "Cloud Function ONLY (cancellation handler)",
     "reader": "admin"
   },
@@ -343,13 +571,13 @@
     "type": "timestamp",
     "description": "When the job document was first created by createJobAndQuote.",
     "writer": "Cloud Function (createJobAndQuote)",
-    "reader": "assigned driver, admin"
+    "reader": "admin, Cloud Functions"
   },
 
   "updatedAt": {
     "type": "timestamp",
     "description": "Last update timestamp. Set on every Cloud Function write to the job doc.",
     "writer": "Cloud Function (any handler that touches this doc)",
-    "reader": "assigned driver, admin"
+    "reader": "admin, Cloud Functions"
   }
 }

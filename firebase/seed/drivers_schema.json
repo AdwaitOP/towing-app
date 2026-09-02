@@ -1,6 +1,7 @@
 {
   "_comment": "Schema reference for the 'drivers' Firestore collection. This is NOT a live Firestore document — it documents every field that a driver document may contain, its type, its writer, and its reader. Use this as the canonical field-name reference for all phases to prevent typos that silently break downstream logic.",
   "_spec_ref": "towing_dispatch_spec_v9.md §Firestore Collections",
+  "_phase4_compatibility": "Existing Phase 1-3 documents may omit Phase 4 capability, engagement, and location-freshness fields. Missing or malformed canFlatbed/canPulling, activeJobId/activeOfferId, walletBalance, or locationUpdatedAt fails eligibility closed until a backend transaction safely initializes or verifies the field. truckType is never used to synthesize capability.",
 
   "uid": {
     "type": "string",
@@ -26,15 +27,15 @@
   "truckType": {
     "type": "string",
     "enum": ["flatbed", "tochan", "hydraulic", "crane"],
-    "description": "Type of tow truck the driver operates.",
-    "writer": "driver",
+    "description": "Descriptive, verified type of tow truck the driver operates. Dispatch compatibility is determined only by backend-owned canFlatbed/canPulling, never inferred from this label.",
+    "writer": "driver while verificationStatus is absent, pending, or rejected; approved-driver changes require an audited Cloud Function that resets verification/capabilities",
     "reader": "driver (own), admin, dispatch (Cloud Function)"
   },
 
   "vehicleNumber": {
     "type": "string",
     "description": "Vehicle registration plate number (e.g. MH-46-XXXX).",
-    "writer": "driver",
+    "writer": "driver while verificationStatus is absent, pending, or rejected; approved-driver changes require an audited Cloud Function",
     "reader": "driver (own), admin"
   },
 
@@ -48,11 +49,44 @@
 
   "walletBalance": {
     "type": "number",
-    "unit": "INR (paise? — use smallest currency unit to avoid float arithmetic)",
+    "unit": "integer paise",
+    "default": 0,
     "description": "Driver's prepaid wallet balance. Commission is deducted on job acceptance; refunded on eligible cancellation. Top-up via Razorpay.",
     "writer": "Cloud Function ONLY (wallet top-up, commission deduction, refund). Drivers cannot write this field.",
     "reader": "driver (own), admin",
-    "IMPORTANT": "Store as integer (paise, i.e. INR * 100) to avoid floating-point precision issues. Phase 2/3 to confirm unit."
+    "IMPORTANT": "Store as a safe integer number of paise (INR * 100). Missing, malformed, negative, or fractional values fail Phase 4 eligibility."
+  },
+
+  "canFlatbed": {
+    "type": "boolean",
+    "default": false,
+    "description": "Backend-approved towing capability. requestedTruckType='flatbed' requires this field to be exactly true. Never derive it dynamically from truckType.",
+    "writer": "Cloud Function ONLY (verification/admin callable). Drivers and admin clients cannot write this field directly.",
+    "reader": "driver (own), admin, dispatch (Cloud Function)"
+  },
+
+  "canPulling": {
+    "type": "boolean",
+    "default": false,
+    "description": "Backend-approved towing capability. requestedTruckType='pulling' requires this field to be exactly true. Never derive it dynamically from truckType.",
+    "writer": "Cloud Function ONLY (verification/admin callable). Drivers and admin clients cannot write this field directly.",
+    "reader": "driver (own), admin, dispatch (Cloud Function)"
+  },
+
+  "activeJobId": {
+    "type": "string | null",
+    "default": null,
+    "description": "Backend-owned engagement fence. Non-null only while this driver owns one job in accepted or in_progress. Existing documents may omit it and must fail closed until safely initialized.",
+    "writer": "Cloud Function ONLY (accept/start/complete/cancellation transactions).",
+    "reader": "driver (own), admin, dispatch (Cloud Function)"
+  },
+
+  "activeOfferId": {
+    "type": "string | null",
+    "default": null,
+    "description": "Backend-owned single-offer fence. Non-null only for the driver's one current offered job. Existing documents may omit it and must fail closed until safely initialized.",
+    "writer": "Cloud Function ONLY (offer/decline/timeout/accept/cancellation transactions).",
+    "reader": "driver (own), admin, dispatch (Cloud Function)"
   },
 
   "verificationStatus": {
@@ -65,13 +99,15 @@
   },
 
   "verificationDocs": {
-    "type": "map",
+    "type": "map | null",
+    "default": null,
+    "exactKeysWhenPresent": ["idPhotoUrl", "rcPhotoUrl", "selfiePhotoUrl", "submittedAt"],
     "description": "Firebase Storage URLs for KYC documents — NOT the images themselves.",
     "fields": {
-      "idPhotoUrl":    { "type": "string", "description": "Storage URL for Aadhaar / Driving License photo" },
-      "rcPhotoUrl":    { "type": "string", "description": "Storage URL for Vehicle RC photo" },
-      "selfiePhotoUrl":{ "type": "string", "description": "Storage URL for live selfie — field name per spec: selfiePhotoUrl" },
-      "submittedAt":   { "type": "timestamp", "description": "When the driver submitted the KYC package. Used by the DPDP retention job." }
+      "idPhotoUrl":    { "type": "string", "required": true, "description": "Storage URL for Aadhaar / Driving License photo" },
+      "rcPhotoUrl":    { "type": "string", "required": true, "description": "Storage URL for Vehicle RC photo" },
+      "selfiePhotoUrl":{ "type": "string", "required": true, "description": "Storage URL for live selfie — field name per spec: selfiePhotoUrl" },
+      "submittedAt":   { "type": "timestamp", "required": true, "description": "When the driver submitted the KYC package. Used by the DPDP retention job." }
     },
     "writer": "Cloud Function ONLY (triggered after Storage upload completes). Drivers cannot write this field.",
     "reader": "driver (own), admin"
@@ -103,10 +139,11 @@
 
   "monthlyCancelCount": {
     "type": "map",
+    "exactKeys": ["month", "count"],
     "description": "Tracks cancellation count for the current calendar month. Lazily reset: if the stored 'month' doesn't match the current calendar month when the cancellation handler runs, the handler resets count to 0 and strictMode to false before evaluating the new cancellation.",
     "fields": {
-      "month": { "type": "string", "description": "Calendar month in 'YYYY-MM' format (e.g. '2026-08')" },
-      "count": { "type": "number", "description": "Number of driver-initiated cancellations so far this month (includes the 1st, penalty-free one)" }
+      "month": { "type": "string", "required": true, "description": "Calendar month in 'YYYY-MM' format (e.g. '2026-08')" },
+      "count": { "type": "number", "required": true, "description": "Number of driver-initiated cancellations so far this month (includes the 1st, penalty-free one)" }
     },
     "default": { "month": "", "count": 0 },
     "writer": "Cloud Function ONLY (cancellation handler). Drivers cannot write this field.",
@@ -122,16 +159,25 @@
 
   "updatedAt": {
     "type": "timestamp",
-    "description": "Last update timestamp. Set by any writer on every update.",
-    "writer": "driver or Cloud Function (whoever updates the doc)",
+    "description": "Last update timestamp. Every authenticated driver update must include updatedAt as a server timestamp equal to request.time; backend writes use their authoritative server timestamp.",
+    "writer": "driver on every self-service update using server timestamp; Cloud Function on every backend update",
     "reader": "driver (own), admin"
   },
 
   "location": {
     "type": "GeoPoint | null",
+    "default": null,
     "description": "Driver's most recently reported location. Updated by the Flutter background location service (Phase 5). Used by dispatch for Haversine pre-filter.",
-    "note": "Phase 1 schema only — the update mechanism (Phase 5) and the security rule for writing location (a driver can write their own location) will be handled when Phase 5 implements the location tracker. For now, treat location writes the same as other allowed driver updates.",
+    "note": "A driver may report the same valid GeoPoint again to refresh freshness or report a changed valid GeoPoint. In either case locationUpdatedAt must be updated atomically to request.time. A location change without that timestamp, a timestamp-only arbitrary client value, deletion, null, or malformed location is denied. Missing, malformed, or stale location fails Phase 4 eligibility.",
     "writer": "driver (own location only)",
-    "reader": "admin, dispatch (Cloud Function)"
+    "reader": "driver (own), admin, dispatch (Cloud Function)"
+  },
+
+  "locationUpdatedAt": {
+    "type": "timestamp | null",
+    "default": null,
+    "description": "Server request timestamp paired with the latest location update. Initial dispatch freshness policy is 120 seconds and remains configurable in dispatch_config/main.",
+    "writer": "driver with a valid location report in the same write, using server timestamp; the GeoPoint may equal the stored value; Cloud Function may also write via Admin SDK",
+    "reader": "driver (own), admin, dispatch (Cloud Function)"
   }
 }

@@ -1,0 +1,136 @@
+{
+  "_comment": "Independent Stage 1 query contract. Composite signatures are derived by tests from filters and ordering; direct document lookups and built-in single-field queries explicitly derive no composite. The Firestore Emulator validates rules/query shape but does not prove production composite-index deployment.",
+  "baselineCompositeCount": 5,
+  "phase4CompositeCount": 17,
+  "queries": [
+    {
+      "name": "baseline_driver_dispatch_listing", "phase": "baseline", "collection": "drivers",
+      "equalityFilters": ["isOnDuty", "verificationStatus"], "rangeFilter": "bannedUntil",
+      "orderBy": [{ "field": "createdAt", "direction": "ASCENDING" }], "directIdLookup": false
+    },
+    {
+      "name": "baseline_jobs_by_status_newest", "phase": "baseline", "collection": "jobs",
+      "equalityFilters": ["status"], "rangeFilter": null,
+      "orderBy": [{ "field": "createdAt", "direction": "DESCENDING" }], "directIdLookup": false
+    },
+    {
+      "name": "baseline_drivers_by_verification_oldest", "phase": "baseline", "collection": "drivers",
+      "equalityFilters": ["verificationStatus"], "rangeFilter": null,
+      "orderBy": [{ "field": "createdAt", "direction": "ASCENDING" }], "directIdLookup": false
+    },
+    {
+      "name": "baseline_verified_drivers_by_wallet", "phase": "baseline", "collection": "drivers",
+      "equalityFilters": ["verificationStatus"], "rangeFilter": "walletBalance",
+      "orderBy": [], "directIdLookup": false
+    },
+    {
+      "name": "baseline_assigned_driver_jobs_newest", "phase": "baseline", "collection": "jobs",
+      "equalityFilters": ["assignedDriver", "status"], "rangeFilter": null,
+      "orderBy": [{ "field": "createdAt", "direction": "DESCENDING" }], "directIdLookup": false
+    },
+    {
+      "name": "eligible_flatbed_drivers_by_wallet", "phase": "phase4", "collection": "drivers",
+      "equalityFilters": ["verificationStatus", "isOnDuty", "canFlatbed", "activeJobId", "activeOfferId"],
+      "rangeFilter": "walletBalance", "orderBy": [], "directIdLookup": false
+    },
+    {
+      "name": "eligible_pulling_drivers_by_wallet", "phase": "phase4", "collection": "drivers",
+      "equalityFilters": ["verificationStatus", "isOnDuty", "canPulling", "activeJobId", "activeOfferId"],
+      "rangeFilter": "walletBalance", "orderBy": [], "directIdLookup": false
+    },
+    {
+      "name": "dispatch_due_jobs", "phase": "phase4", "collection": "jobs",
+      "equalityFilters": ["status", "dispatchState"], "rangeFilter": "dispatchNextActionAt",
+      "orderBy": [], "directIdLookup": false
+    },
+    {
+      "name": "dispatch_expired_leases", "phase": "phase4", "collection": "jobs",
+      "equalityFilters": ["status", "dispatchState"], "rangeFilter": "dispatchLeaseUntil",
+      "orderBy": [], "directIdLookup": false
+    },
+    {
+      "name": "expired_current_job_offers", "phase": "phase4", "collection": "jobs",
+      "equalityFilters": ["status"], "rangeFilter": "offerExpiresAt", "orderBy": [],
+      "directIdLookup": false
+    },
+    {
+      "name": "pending_cancellation_resolution", "phase": "phase4", "collection": "jobs",
+      "equalityFilters": ["cancellationResolutionState"], "rangeFilter": "cancellationRequestedAt",
+      "orderBy": [], "directIdLookup": false
+    },
+    {
+      "name": "due_job_refund_projection", "phase": "phase4", "collection": "jobs",
+      "equalityFilters": ["refundState"], "rangeFilter": "refundNextAttemptAt", "orderBy": [],
+      "directIdLookup": false
+    },
+    {
+      "name": "driver_offer_feed", "phase": "phase4", "collection": "job_offers",
+      "equalityFilters": ["driverId", "status"], "rangeFilter": null,
+      "orderBy": [{ "field": "offeredAt", "direction": "DESCENDING" }], "directIdLookup": false
+    },
+    {
+      "name": "expired_offer_reconciliation", "phase": "phase4", "collection": "job_offers",
+      "equalityFilters": ["status"], "rangeFilter": "expiresAt", "orderBy": [],
+      "directIdLookup": false
+    },
+    {
+      "name": "job_generation_offer_sequence", "phase": "phase4", "collection": "job_offers",
+      "equalityFilters": ["jobId", "dispatchGeneration"], "rangeFilter": null,
+      "orderBy": [{ "field": "candidateIndex", "direction": "ASCENDING" }], "directIdLookup": false
+    },
+    {
+      "name": "driver_wallet_audit_newest", "phase": "phase4", "collection": "wallet_entries",
+      "equalityFilters": ["driverId"], "rangeFilter": null,
+      "orderBy": [{ "field": "createdAt", "direction": "DESCENDING" }], "directIdLookup": false
+    },
+    {
+      "name": "job_wallet_audit_oldest", "phase": "phase4", "collection": "wallet_entries",
+      "equalityFilters": ["jobId"], "rangeFilter": null,
+      "orderBy": [{ "field": "createdAt", "direction": "ASCENDING" }], "directIdLookup": false
+    },
+    {
+      "name": "due_refund_requests", "phase": "phase4", "collection": "refund_requests",
+      "equalityFilters": ["state"], "rangeFilter": "nextAttemptAt", "orderBy": [],
+      "directIdLookup": false
+    },
+    {
+      "name": "due_submitted_refund_reconciliation", "phase": "phase4", "collection": "refund_requests",
+      "equalityFilters": ["state"], "rangeFilter": "reconciliationNextAttemptAt", "orderBy": [],
+      "directIdLookup": false
+    },
+    {
+      "name": "expired_refund_leases", "phase": "phase4", "collection": "refund_requests",
+      "equalityFilters": ["state"], "rangeFilter": "leaseUntil", "orderBy": [],
+      "directIdLookup": false
+    },
+    {
+      "name": "due_notification_events", "phase": "phase4", "collection": "notification_outbox",
+      "equalityFilters": ["state"], "rangeFilter": "nextAttemptAt", "orderBy": [],
+      "directIdLookup": false
+    },
+    {
+      "name": "expired_notification_leases", "phase": "phase4", "collection": "notification_outbox",
+      "equalityFilters": ["state"], "rangeFilter": "leaseUntil", "orderBy": [],
+      "directIdLookup": false
+    },
+    {
+      "name": "legacy_pending_offer_bootstrap", "phase": "phase4", "collection": "jobs",
+      "equalityFilters": ["status"], "rangeFilter": null, "orderBy": [], "directIdLookup": false
+    },
+    {
+      "name": "mutation_receipt_by_request_id", "phase": "phase4", "collection": "processed_requests",
+      "documentPath": "processed_requests/{requestId}", "equalityFilters": [], "rangeFilter": null,
+      "orderBy": [], "directIdLookup": true
+    },
+    {
+      "name": "monthly_usage_counter_by_month", "phase": "phase4", "collection": "usage_counters",
+      "documentPath": "usage_counters/{YYYY-MM}", "equalityFilters": [], "rangeFilter": null,
+      "orderBy": [], "directIdLookup": true
+    },
+    {
+      "name": "dispatch_run_by_generation", "phase": "phase4", "collection": "dispatch_runs",
+      "documentPath": "jobs/{jobId}/dispatch_runs/{generationId}", "equalityFilters": [],
+      "rangeFilter": null, "orderBy": [], "directIdLookup": true
+    }
+  ]
+}

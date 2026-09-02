@@ -3,14 +3,14 @@
   "_usage": "A new document matching this shape is created by the dispatch Cloud Function at the start of each calendar month when no document yet exists for that month.",
   "_spec_ref": "towing_dispatch_spec_v9.md §Billing & Cost Guardrails",
 
-  "olaMapsMatrixCalls": 0,
+  "olaMapsMatrixRequests": 0,
+  "olaMapsMatrixPairs": 0,
   "whatsappTemplateSends": 0,
-
-  "softCapOlaMaps": 4500000,
-  "_softCapOlaMaps_note": "Ola Maps free tier is 5M calls/month. Soft cap at 4.5M (90%) so the circuit breaker trips before the limit, giving headroom for in-flight requests.",
 
   "softCapWhatsapp": 900,
   "_softCapWhatsapp_note": "Conservative soft cap on business-initiated WhatsApp template sends per month. Adjust based on observed usage and Meta's template messaging limits for your account tier.",
 
-  "_circuit_breaker_note": "When olaMapsMatrixCalls >= softCapOlaMaps, dispatch logic degrades gracefully (falls back to Haversine-only selection). This is checked at the top of the dispatch Cloud Function. See Phase 4."
+  "updatedAt": null,
+  "_updatedAt_template_sentinel": "The null value is a non-deployable JSON template sentinel. The backend must replace it with a Firestore server timestamp on creation and every counter update.",
+  "_ola_note": "Ola request and origin×destination pair counts are distinct. This template intentionally contains no authoritative production Ola cost cap; dispatch_config/main.olaMonthlyPairCap remains null until deployment evidence supplies one. Legacy olaMapsMatrixCalls and softCapOlaMaps values, if present on old documents, are migration-only and not authoritative."
 }

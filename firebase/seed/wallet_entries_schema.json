@@ -1,0 +1,81 @@
+{
+  "_comment": "Schema reference for immutable wallet_entries/{operationId}. The deterministic document ID is the semantic operation identity and the record is permanent financial evidence even after operational offers/runs are deleted.",
+  "_spec_ref": "docs/phase4_decisions.md P4-D013, P4-D021, P4-D022, P4-D028, P4-D031, P4-D035 and §wallet_entries/{operationId}",
+  "_operation_id_formats": {
+    "commission_debit": "commission_debit:{jobId}:{offerId}",
+    "customer_cancel_credit": "customer_cancel_credit:{jobId}:{offerId}",
+    "driver_cancel_credit": "driver_cancel_credit:{jobId}:{offerId}",
+    "_collision_invariant": "offerId is the immutable occurrence identity of the accepted assignment. Using {jobId}:{offerId} rather than {jobId}:{driverId} ensures that different legitimate acceptance occurrences (e.g. the same driver accepting in two separate dispatch generations) produce different ledger IDs while the same semantic occurrence retried produces the same ID. Past immutable ledger records can never collide with later occurrences."
+  },
+  "_invariants": "Backend create only; no update or delete path is permitted. Exactly one document may exist for each semantic operation ID. Ledger creation and drivers.walletBalance mutation occur in the same transaction. Every money field is a safe integer number of paise; balanceBeforePaise and balanceAfterPaise are non-negative and balanceAfterPaise = balanceBeforePaise + deltaPaise. A driver-cancellation entry remains independently interpretable without mutable config, job_offers, or dispatch_runs.",
+  "_conditional_contracts": {
+    "commission_debit": {
+      "operationId": "commission_debit:{jobId}:{offerId}",
+      "commissionPaise": "> 0",
+      "forfeiturePaise": "= 0",
+      "creditPaise": "= 0",
+      "deltaPaise": "= -commissionPaise",
+      "balanceAfterPaise": "= balanceBeforePaise - commissionPaise",
+      "cancellationPolicyEvidence": "must be null"
+    },
+    "customer_cancel_credit": {
+      "operationId": "customer_cancel_credit:{jobId}:{offerId}",
+      "commissionPaise": "> 0",
+      "forfeiturePaise": "= 0",
+      "creditPaise": "= commissionPaise",
+      "deltaPaise": "= creditPaise",
+      "balanceAfterPaise": "= balanceBeforePaise + creditPaise",
+      "cancellationPolicyEvidence": "must be null"
+    },
+    "driver_cancel_credit": {
+      "operationId": "driver_cancel_credit:{jobId}:{offerId}",
+      "commissionPaise": "> 0",
+      "forfeiturePaise": "0 <= forfeiturePaise <= commissionPaise",
+      "creditPaise": "= commissionPaise - forfeiturePaise",
+      "deltaPaise": "= creditPaise",
+      "balanceAfterPaise": "= balanceBeforePaise + creditPaise",
+      "cancellationPolicyEvidence": "required complete immutable map",
+      "fullForfeiture": "forfeiturePaise = commissionPaise; creditPaise = 0; deltaPaise = 0; ledger entry still required"
+    }
+  },
+
+  "operationId": { "type": "string", "source": "document ID", "required": true, "description": "Must exactly equal the type-specific deterministic format in _operation_id_formats." },
+  "driverId": { "type": "string", "required": true, "writer": "Cloud Function ONLY" },
+  "jobId": { "type": "string", "required": true, "writer": "Cloud Function ONLY" },
+  "offerId": { "type": "string", "required": true, "description": "Permanent identity of the assignment evidence even if the operational offer is later deleted.", "writer": "Cloud Function ONLY" },
+  "type": { "type": "string", "enum": ["commission_debit", "customer_cancel_credit", "driver_cancel_credit"], "required": true, "writer": "Cloud Function ONLY" },
+  "commissionPaise": { "type": "number", "unit": "positive safe integer paise", "required": true, "writer": "Cloud Function ONLY" },
+  "forfeiturePaise": { "type": "number", "unit": "non-negative safe integer paise", "required": true, "writer": "Cloud Function ONLY" },
+  "creditPaise": { "type": "number", "unit": "non-negative safe integer paise", "required": true, "writer": "Cloud Function ONLY" },
+  "deltaPaise": { "type": "number", "unit": "signed safe integer paise", "required": true, "writer": "Cloud Function ONLY" },
+  "balanceBeforePaise": { "type": "number", "unit": "non-negative safe integer paise", "required": true, "writer": "Cloud Function ONLY" },
+  "balanceAfterPaise": { "type": "number", "unit": "non-negative safe integer paise", "required": true, "writer": "Cloud Function ONLY" },
+  "cancellationPolicyEvidence": {
+    "type": "map | null",
+    "default": null,
+    "required": true,
+    "requiredForTypes": ["driver_cancel_credit"],
+    "mustBeNullForTypes": ["commission_debit", "customer_cancel_credit"],
+    "exactKeysWhenPresent": ["version", "timezone", "roundingMode", "freeCancellationsPerMonth", "forfeitPctByCount", "banThresholdCount", "banDurationDays", "cancellationMonth", "cancellationCount", "strictModeBefore", "strictModeApplied", "forfeiturePercent", "capturedAt"],
+    "fields": {
+      "version": { "type": "number", "unit": "positive safe integer", "required": true },
+      "timezone": { "type": "string", "enum": ["Asia/Kolkata"], "required": true },
+      "roundingMode": { "type": "string", "enum": ["HALF_UP"], "required": true },
+      "freeCancellationsPerMonth": { "type": "number", "unit": "non-negative safe integer", "required": true },
+      "forfeitPctByCount": { "type": "map<string, non-negative safe integer percent>", "required": true },
+      "banThresholdCount": { "type": "number", "unit": "positive safe integer", "required": true },
+      "banDurationDays": { "type": "number", "unit": "positive safe integer", "required": true },
+      "cancellationMonth": { "type": "string", "format": "YYYY-MM in Asia/Kolkata", "required": true },
+      "cancellationCount": { "type": "number", "unit": "positive safe integer", "required": true },
+      "strictModeBefore": { "type": "boolean", "required": true },
+      "strictModeApplied": { "type": "boolean", "required": true },
+      "forfeiturePercent": { "type": "number", "unit": "safe integer percent in [0,100]", "required": true },
+      "capturedAt": { "type": "timestamp", "required": true }
+    },
+    "writer": "Cloud Function ONLY"
+  },
+  "sourceRequestId": { "type": "string | null", "default": null, "required": true, "writer": "Cloud Function ONLY" },
+  "sourceType": { "type": "string", "enum": ["driver", "customer", "system"], "required": true, "description": "Semantic source of the operation; not a grant of client write authority.", "writer": "Cloud Function ONLY" },
+  "actorUid": { "type": "string | null", "default": null, "required": true, "description": "Authenticated initiating UID when one exists; null for system/customer-WhatsApp operations.", "writer": "Cloud Function ONLY" },
+  "createdAt": { "type": "timestamp", "required": true, "writer": "Cloud Function ONLY" }
+}

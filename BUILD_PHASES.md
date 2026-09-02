@@ -13,7 +13,7 @@ Order matters — phases 1–4 are strictly sequential (each depends on the last
 
 **Scope:**
 - Every collection under "Firestore Collections": `drivers`, `jobs`, `whatsapp_sessions`, `processed_requests`, `pricing_config` (with its `booking_tiers`, `fare_formula`, `cancellation_policy` sub-objects), `usage_counters`, `admin_actions`, `business_config`
-- `firestore.rules` enforcing the access boundaries described across Parts 2 and 3 (drivers can't touch their own `walletBalance`/`verificationStatus`/`bannedUntil`/`strictMode`; only Cloud Functions and admin-claim users can write `pricing_config`, `business_config`, `usage_counters`, `admin_actions`)
+- `firestore.rules` enforcing the access boundaries described across Parts 2 and 3 (drivers can't touch their own `walletBalance`/`verificationStatus`/`bannedUntil`/`strictMode`; sensitive/config/audit writes are Cloud Function-only, with admin actions routed through audited backend callables)
 - `storage.rules` for `driver_verification/{driverId}/{id|rc|selfie}.jpg` and `invoices/{jobId}.pdf` per the access rules in Part 2/3
 - A scheduled Cloud Function stub for the DPDP retention/deletion policy on verification photos (logic can be minimal for now — the point is the schema and trigger exist)
 - `functions/` directory structure — no business logic yet
@@ -86,29 +86,85 @@ dispatch implementation.
 **Model:** Claude Sonnet 4.6 (Thinking) — **Mode:** Planning
 *(This is the highest-risk phase in the whole build — race conditions and money math. Don't rush the plan review here.)*
 
+**Owner-approved Phase 4 contract:** `docs/phase4_decisions.md`. That ADR is
+authoritative for Phase 4 state transitions, schema/rules/index additions, and
+the production gate. Stage 0 is documentation only; Phase 4 implementation
+starts with the schema/rules/index work defined there.
+
 **Scope:**
-- Two-stage driver selection: Haversine pre-filter → Ola Maps Matrix API on shortlist, excluding banned/unapproved drivers
-- Job state machine and the atomic accept-transaction (status + `offeredTo` check, wallet balance check, deduction)
-- 45s offer timeout via Cloud Tasks + cascade to next candidate
-- Full cancellation & refund policy: customer-cancel (non-refundable + unconditional driver refund), no-driver-found (Razorpay refund), driver self-cancel ramp (1 free → 20/30/40/50% → ban), strict-mode reban, calendar-month resets for both `monthlyCancelCount` and `strictMode`
-- `usage_counters` circuit breaker + GCP budget alert setup
+- Durable, lease-based consumer/reconciler for every paid `pending_offer`; the
+  Phase 3 callback is only an accelerator and may occur zero, one, or many times
+- Driver eligibility requires approved verification, `isOnDuty === true`, no
+  current ban, fresh location, sufficient wallet, no active job/offer, and the
+  backend-owned `canFlatbed`/`canPulling` capability required by the request
+- Configurable Haversine rounds `[10, 20, 35]` km, maximum 30 unique candidates
+  per generation, and maximum 10 Matrix candidates per round
+- Ola ranking by routed ETA, routed distance, then driver UID; bounded provider
+  retry followed by explicit Haversine degraded mode
+- Top-level sanitized `job_offers` feed, one active offer per driver, 45-second
+  Cloud Tasks expiry, explicit penalty-free decline, and sequential cascade
+- Atomic/idempotent accept with one-active-job enforcement and wallet debit plus
+  permanent ledger entry in the same transaction
+- Authenticated/idempotent `accepted -> in_progress -> completed` callables
+- Full cancellation/refund policy: customer-cancel (non-refundable booking fee
+  plus unconditional driver wallet credit), genuine no-driver exhaustion
+  (Razorpay refund), accepted-driver self-cancel ramp and redispatch, strict-mode
+  reban, and Asia/Kolkata calendar-month reset
+- Shared transactional usage counters for Ola Matrix requests and pairs; the
+  production pair/cost cap and GCP budget recipients remain deployment config
+- Durable refund requests and WhatsApp notification outbox; external side
+  effects always follow committed database state and are reconciled by leases
+- Dispatch-run `assigned` is nonterminal: accepted-driver cancellation returns
+  the same generation to `active`, preserves/excludes all attempted candidates,
+  preserves authoritative `dispatch_runs.nextCandidateIndex` exactly, and never
+  writes `finalizedAt`; worker lease fields exist only on the job
+- Customer cancellation marker has deterministic precedence over driver cancel:
+  driver cancel requires cancellation request/resolution/terminal timestamps
+  all null, resolution state `none`, and no customer provenance; otherwise it
+  is a stable non-penalizing no-op
+- No-driver refund calls lock provider key
+  `refund_no_driver_found_{jobId}` and hash the exact canonical payment/amount
+  identity before the first provider request; every attempt binds that stored
+  key to request header `X-Refund-Idempotency`
+- Submitted refunds remain durably scheduled for reclaimable provider-status
+  reconciliation so missed webhooks cannot strand them; webhook/fetch races
+  converge transactionally and `confirmed` is absorbing
+- Current `dispatch_config.olaMonthlyPairCap` and current usage are revalidated
+  before every Matrix pair reservation; the cap is not snapshotted as run authority
 
 **Explicitly excluded:** any UI — this phase is pure backend logic, testable via Cloud Function invocations/emulator, not through the apps
 
 **Definition of done:** *(this phase carries most of the checklist — go through each individually rather than skimming)*
+- [ ] Stage 1 schema, sanitized projections, rules, indexes, and rules-emulator tests match `docs/phase4_decisions.md`
+- [ ] A durable consumer/reconciler recovers every paid `pending_offer` job and every missed/delayed timeout or external-effect marker
 - [ ] Job acceptance is a single atomic transaction guarding against double-assignment
 - [ ] ACCEPT JOB calls are idempotent via a client-generated `requestId`
+- [ ] One active job and one active offer per driver are enforced transactionally through backend-owned fields
 - [ ] 45s offer timeout implemented via Cloud Tasks, not an in-function sleep
 - [ ] Ola Maps Matrix API is only called against a pre-filtered shortlist, never the full on-duty fleet
-- [ ] GCP budget alert + `usage_counters` circuit breaker in place
+- [ ] Matching uses server-owned towing capabilities and the approved finite search/ranking policy
+- [ ] Ola provider failure enters bounded retry/Haversine degraded mode or operational hold, never `no_driver_found`
+- [ ] Matrix request and origin×destination pair usage are both counted transactionally; no historical 4.5M cap is treated as authoritative
+- [ ] GCP budget alert + deployment-configured `usage_counters` circuit breaker in place
 - [ ] Customer-paid booking fees are always non-refundable on customer cancellation
 - [ ] Driver commission refund on customer-initiated cancellation is unconditional (not subject to the ramp)
 - [ ] Driver self-cancellation ramp reads `cancellation_policy` from Firestore, not hardcoded percentages
+- [ ] Driver cancellation policy is snapshotted/versioned at acceptance and HALF-UP paise arithmetic preserves the original commission exactly
+- [ ] Accepted-driver cancellation applies the policy, releases/excludes that driver, and redispatches the same customer job without terminally cancelling it
+- [ ] The accepted-driver reset transaction requires `cancellationRequestedAt`, `cancellationResolvedAt`, and `cancelledAt` all null, `cancellationResolutionState=none`, and no customer provenance; it exactly clears current assignment/offer/job-lease fields, preserves immutable job/run evidence and `dispatch_runs.nextCandidateIndex` exactly, returns job `assigned -> ready` and run `assigned -> active` in the same generation, and atomically stores its receipt and deterministic ledger entry
+- [ ] Normal driver self-cancellation from `in_progress` is rejected pending an approved support policy
 - [ ] `monthlyCancelCount` correctly resets on calendar-month rollover
 - [ ] Once `strictMode` is `true`, every subsequent driver-initiated cancellation within that same calendar month forfeits 100% and issues a fresh 7-day ban
 - [ ] `strictMode` resets to `false` on calendar-month rollover
 - [ ] Dispatch's driver-selection step excludes any driver with `bannedUntil` in the future
 - [ ] Dispatch's driver-selection step also excludes any driver whose `verificationStatus` isn't `approved`
+- [ ] Missing/malformed/stale driver, wallet, policy, or location data fails closed with an operational reason
+- [ ] `no_driver_found` is written only after the persisted finite generation is genuinely exhausted
+- [ ] Wallet ledger operation IDs and signed integer-paise equations match the Stage 0 ADR; driver-cancel entries retain complete policy/evaluation evidence, including zero-credit 100% forfeitures
+- [ ] A no-driver refund stores immutable provider inputs and request hash before the call; every attempt sends `X-Refund-Idempotency` with the exact stored key; uncertain initiation retries reconcile first; submitted requests have reclaimable due provider-fetch reconciliation; and signed webhook/provider-fetch races converge to absorbing `confirmed`
+- [ ] Legacy `pending_offer` bootstrap uses a status-only discovery query before materializing safe operational defaults, so missing ordered fields cannot hide paid work
+- [ ] Wallet top-up is implemented and validated before live driver acceptance is enabled
+- [ ] Paid live traffic remains disabled until the durable workflow passes real Firestore Emulator concurrency and failure-injection tests
 
 ---
 
