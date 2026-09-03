@@ -77,11 +77,14 @@ exports.reconcileOfferTimeouts = onSchedule({
 });
 
 
+// ── Phase 4 Stage 4 driver acceptance & commission debit ─────────────────────
+const { acceptJob } = require('./dispatch/acceptJob');
+exports.acceptJob = acceptJob;
+
 // Later Phase 4 stages remain excluded.
-// const { acceptJob } = require('./dispatch/acceptJob');
 // const { cancelJob } = require('./dispatch/cancelJob');
-// exports.acceptJob = acceptJob;
 // exports.cancelJob = cancelJob;
+
 
 // ── Phase 6 (placeholder) ────────────────────────────────────────────────────
 // const { adminApproveDriver } = require('./admin/approveDriver');
