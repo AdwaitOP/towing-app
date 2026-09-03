@@ -66,13 +66,22 @@ exports.reconcilePendingDispatch = onSchedule({
   logger.info('Dispatch recovery result', await productionRecovery().reconcilePendingJobs());
 });
 
+// ── Phase 4 Stage 3 offer timeout execution & recovery ───────────────────────
+const { offerTimeout } = require('./dispatch/offerTimeout');
+exports.offerTimeout = offerTimeout;
+exports.reconcileOfferTimeouts = onSchedule({
+  schedule: process.env.DISPATCH_TIMEOUT_RECONCILE_SCHEDULE || process.env.DISPATCH_RECONCILE_SCHEDULE || '',
+  timeZone: 'Asia/Kolkata', secrets: ['OLA_MAPS_API_KEY'],
+}, async () => {
+  logger.info('Offer timeout recovery result', await productionRecovery().reconcileOfferTimeouts());
+});
+
+
 // Later Phase 4 stages remain excluded.
 // const { acceptJob } = require('./dispatch/acceptJob');
 // const { cancelJob } = require('./dispatch/cancelJob');
-// const { offerTimeout } = require('./dispatch/offerTimeout');
 // exports.acceptJob = acceptJob;
 // exports.cancelJob = cancelJob;
-// exports.offerTimeout = offerTimeout;
 
 // ── Phase 6 (placeholder) ────────────────────────────────────────────────────
 // const { adminApproveDriver } = require('./admin/approveDriver');

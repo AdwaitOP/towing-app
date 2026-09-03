@@ -1,0 +1,122 @@
+{
+  "_comment": "Schema reference for dispatch_config/recovery_checkpoints. Backend-written and admin-readable. Governs Stage 3 recovery sweep epochs, cursors, and immutable high-water marks.",
+  "_spec_ref": "docs/phase4_decisions.md P4-D035 and recovery checkpoint contract",
+  "_security_boundary": "Client writes are completely denied under match /dispatch_config/{document}. Admin SDK performs compare-and-set updates.",
+  "version": 1,
+  "dueOfferSweep": {
+    "type": "map",
+    "required": true,
+    "exactKeys": [
+      "sweepEpoch",
+      "cursor",
+      "upperBound"
+    ],
+    "fields": {
+      "sweepEpoch": {
+        "type": "number",
+        "unit": "positive safe integer (1 <= sweepEpoch <= Number.MAX_SAFE_INTEGER)",
+        "required": true
+      },
+      "cursor": {
+        "type": "map",
+        "exactKeys": [
+          "offerExpiresAt",
+          "jobId"
+        ],
+        "nullPairRule": "offerExpiresAt and jobId must both be non-null or both be null",
+        "fields": {
+          "offerExpiresAt": {
+            "type": "Firestore Timestamp | null",
+            "required": true
+          },
+          "jobId": {
+            "type": "string | null",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Legal Firestore document ID (no slashes, non-empty when non-null)",
+            "required": true
+          }
+        }
+      },
+      "upperBound": {
+        "type": "map",
+        "exactKeys": [
+          "offerExpiresAt",
+          "jobId"
+        ],
+        "nullPairRule": "offerExpiresAt and jobId must both be non-null or both be null",
+        "fields": {
+          "offerExpiresAt": {
+            "type": "Firestore Timestamp | null",
+            "required": true
+          },
+          "jobId": {
+            "type": "string | null",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Legal Firestore document ID (no slashes, non-empty when non-null)",
+            "required": true
+          }
+        }
+      }
+    }
+  },
+  "pendingEnqueueSweep": {
+    "type": "map",
+    "required": true,
+    "exactKeys": [
+      "sweepEpoch",
+      "cursor",
+      "upperBound"
+    ],
+    "fields": {
+      "sweepEpoch": {
+        "type": "number",
+        "unit": "positive safe integer (1 <= sweepEpoch <= Number.MAX_SAFE_INTEGER)",
+        "required": true
+      },
+      "cursor": {
+        "type": "map",
+        "exactKeys": [
+          "expiresAt",
+          "offerId"
+        ],
+        "nullPairRule": "expiresAt and offerId must both be non-null or both be null",
+        "fields": {
+          "expiresAt": {
+            "type": "Firestore Timestamp | null",
+            "required": true
+          },
+          "offerId": {
+            "type": "string | null",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Legal Firestore document ID (no slashes, non-empty when non-null)",
+            "required": true
+          }
+        }
+      },
+      "upperBound": {
+        "type": "map",
+        "exactKeys": [
+          "expiresAt",
+          "offerId"
+        ],
+        "nullPairRule": "expiresAt and offerId must both be non-null or both be null",
+        "fields": {
+          "expiresAt": {
+            "type": "Firestore Timestamp | null",
+            "required": true
+          },
+          "offerId": {
+            "type": "string | null",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Legal Firestore document ID (no slashes, non-empty when non-null)",
+            "required": true
+          }
+        }
+      }
+    }
+  },
+  "updatedAt": {
+    "type": "Firestore Timestamp",
+    "required": true
+  }
+}

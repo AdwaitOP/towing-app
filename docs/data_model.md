@@ -184,6 +184,30 @@ and is never copied into an immutable dispatch run as authority.
 
 ---
 
+### `dispatch_config/recovery_checkpoints` *(Stage 3 recovery contract)*
+
+Backend-written, admin-readable persistent recovery state tracking bounded, fair,
+deterministic progress across worker restarts:
+
+| Field | Type / Description |
+|---|---|
+| `version` | positive integer schema version / `1` |
+| `dueOfferSweep` | object tracking Category A due offer sweep (exact keys enforced) |
+| `dueOfferSweep.sweepEpoch` | positive safe integer sweep counter (`1 <= sweepEpoch <= Number.MAX_SAFE_INTEGER`, starts at `1`) |
+| `dueOfferSweep.cursor` | `{ offerExpiresAt: Timestamp|null, jobId: string|null }` (null-pair rule enforced; non-empty document ID) |
+| `dueOfferSweep.upperBound` | `{ offerExpiresAt: Timestamp|null, jobId: string|null }` (immutable during epoch; null-pair rule enforced) |
+| `pendingEnqueueSweep` | object tracking Category B pending enqueue sweep (exact keys enforced) |
+| `pendingEnqueueSweep.sweepEpoch` | positive safe integer sweep counter (`1 <= sweepEpoch <= Number.MAX_SAFE_INTEGER`, starts at `1`) |
+| `pendingEnqueueSweep.cursor` | `{ expiresAt: Timestamp|null, offerId: string|null }` (null-pair rule enforced; non-empty document ID) |
+| `pendingEnqueueSweep.upperBound` | `{ expiresAt: Timestamp|null, offerId: string|null }` (immutable during epoch; null-pair rule enforced) |
+| `updatedAt` | Authoritative Firestore Timestamp of last checkpoint update |
+
+Security rules enforce client write denial via `match /dispatch_config/{document}`.
+Production dispatch engine references `dispatch_config/main` directly (`.doc('main')`)
+and is completely isolated from `dispatch_config/recovery_checkpoints`.
+
+---
+
 ### `jobs/{jobId}/dispatch_runs/{generationId}` *(Stage 1 schema contract)*
 
 Backend-only finite search-policy snapshot and candidate/cursor audit. Status is

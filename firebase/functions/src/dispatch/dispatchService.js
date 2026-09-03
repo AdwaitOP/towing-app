@@ -10,6 +10,8 @@ const {
   DispatchError, POLICY_KEYS, positive, finiteNonnegative, timestampMillis, materializeWorkflow,
   validatePaidJob, validateDispatchConfig, assertAuthority, driverCoords, driverEligibility, validateRun,
 } = require('./dispatchValidation');
+const { createTaskQueueService } = require('../services/taskQueueService');
+const { createOfferTimeoutManager } = require('./offerTimeout');
 
 const OFFER_LIFETIME_MS = 45000;
 const STALE_CODES = new Set(['LEASE_EXPIRED', 'LEASE_DISPLACED', 'JOB_NOT_PENDING', 'CANCELLATION_PRECEDENCE']);
@@ -24,9 +26,16 @@ function createDispatchService({
   db = getFirestore(), TimestampClass = Timestamp, now = () => new Date(),
   randomUUID = () => crypto.randomUUID(), olaClient = createOlaMapsClient(),
   usageService = createUsageCounterService({ db, TimestampClass, now }),
+  taskQueueService = null, timeoutManager = null,
   defaultLeaseDurationMs = 30000, retryDelayMs = 15000,
 } = {}) {
   if (!positive(defaultLeaseDurationMs) || !positive(retryDelayMs)) throw new DispatchError('RUNTIME_CONFIG_INVALID');
+  const taskQueue = taskQueueService || createTaskQueueService();
+  const timeoutMgr = timeoutManager || createOfferTimeoutManager({
+    db, TimestampClass, now,
+    dispatchService: { processDispatchJob: (...args) => processDispatchJob(...args) },
+    taskQueueService: taskQueue,
+  });
   const jobRefFor = jobId => {
     if (typeof jobId !== 'string' || !jobId || jobId.includes('/')) throw new DispatchError('JOB_ID_INVALID');
     return db.collection('jobs').doc(jobId);
@@ -285,9 +294,33 @@ function createDispatchService({
           dispatchLeaseOwner: null, dispatchLeaseUntil: null, dispatchNextActionAt: null,
           dispatchLastFailure: null, stateVersion: job.stateVersion + 1, updatedAt: at,
         });
-        return { dispatched: true, offerId, driverId: candidate.driverId, candidateIndex: index, generation: run.generation };
+        const expiresDate = expires.toDate ? expires.toDate() : new Date(expires.toMillis());
+        return { dispatched: true, offerId, driverId: candidate.driverId, candidateIndex: index, generation: run.generation, expiresAt: expiresDate };
       });
-      if (!result.skipped) return result;
+      if (!result.skipped) {
+        if (result.dispatched) {
+          try {
+            const enqueueResult = await taskQueue.enqueueOfferTimeoutTask({
+              jobId,
+              offerId: result.offerId,
+              dispatchGeneration: result.generation,
+              scheduleTime: result.expiresAt,
+            });
+            if (enqueueResult.enqueued) {
+              await timeoutMgr.convergeTaskMarker({
+                jobId,
+                offerId: result.offerId,
+                dispatchGeneration: result.generation,
+                taskId: enqueueResult.taskId,
+              });
+            }
+          } catch {
+            // Task enqueue failure must never undo the offer or fail dispatch.
+            // Reconciler recovers missing task/marker.
+          }
+        }
+        return result;
+      }
     }
   }
 
@@ -322,7 +355,14 @@ function createDispatchService({
     }
   }
 
-  return { triggerDispatch: processDispatchJob, processDispatchJob, bootstrapDispatchJob, claimDispatch };
+  return {
+    triggerDispatch: processDispatchJob,
+    processDispatchJob,
+    bootstrapDispatchJob,
+    claimDispatch,
+    timeoutManager: timeoutMgr,
+    taskQueueService: taskQueue,
+  };
 }
 
 function sameSearchJob(a, b) {
@@ -358,6 +398,12 @@ function getDefaultDispatchService() {
   if (!defaultService) defaultService = createDispatchService();
   return defaultService;
 }
-module.exports = { DispatchError, createDispatchService, offerIdFor,
+
+module.exports = {
+  DispatchError,
+  createDispatchService,
+  getDefaultDispatchService,
+  offerIdFor,
   triggerDispatch: (...args) => getDefaultDispatchService().triggerDispatch(...args),
-  bootstrapDispatchJob: (...args) => getDefaultDispatchService().bootstrapDispatchJob(...args) };
+  bootstrapDispatchJob: (...args) => getDefaultDispatchService().bootstrapDispatchJob(...args),
+};

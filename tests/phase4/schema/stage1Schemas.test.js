@@ -1142,15 +1142,19 @@ test('exact query fixture equals every baseline and Stage 1 composite, with no e
   const actual = indexes.indexes.map(indexSignature);
 
   assert.equal(contract.baselineCompositeCount, 5);
-  assert.equal(contract.phase4CompositeCount, 17);
+  assert.equal(contract.phase4CompositeCount, 19);
   assert.equal(definitions.filter(({ query, signature }) =>
     query.phase === 'baseline' && signature).length, 5);
   assert.equal(definitions.filter(({ query, signature }) =>
-    query.phase === 'phase4' && signature).length, 17);
-  assert.equal(expected.length, 22);
-  assert.equal(actual.length, 22);
+    query.phase === 'phase4' && signature).length, 19);
+  assert.equal(expected.length, 24);
+  assert.equal(actual.length, 24);
   assert.deepEqual(actual, expected, 'no missing, reordered, or speculative composite indexes');
   assert.equal(new Set(actual).size, actual.length, 'no duplicate composite signatures');
+  assert.ok(actual.includes('jobs:status:ASCENDING,offerExpiresAt:ASCENDING'), 'jobs offerExpiresAt forward scan ASC index present');
+  assert.ok(actual.includes('jobs:status:ASCENDING,offerExpiresAt:DESCENDING'), 'jobs offerExpiresAt high-water DESC index present');
+  assert.ok(actual.includes('job_offers:status:ASCENDING,expiresAt:ASCENDING'), 'job_offers expiresAt forward scan ASC index present');
+  assert.ok(actual.includes('job_offers:status:ASCENDING,expiresAt:DESCENDING'), 'job_offers expiresAt high-water DESC index present');
   assert.deepEqual(indexes.fieldOverrides, []);
   for (const index of indexes.indexes) {
     assert.equal(index.queryScope, 'COLLECTION');

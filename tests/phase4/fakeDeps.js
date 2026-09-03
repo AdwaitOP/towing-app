@@ -69,8 +69,14 @@ class FakeQuery {
   where(field, operator, value) {
     return new FakeQuery(this.db, this.path, [...this.filters, { field, operator, value }], this.maximum);
   }
-  limit(maximum) { return new FakeQuery(this.db, this.path, this.filters, maximum); }
-  startAfter(snapshot) { return new FakeQuery(this.db, this.path, this.filters, this.maximum, snapshot.id); }
+  orderBy() { return this; }
+  limit(maximum) { return new FakeQuery(this.db, this.path, this.filters, maximum, this.cursor); }
+  startAt() { return this; }
+  endAt() { return this; }
+  startAfter(...args) {
+    const id = args.length === 1 && args[0]?.id ? args[0].id : (args.length > 1 ? args[args.length - 1] : args[0]);
+    return new FakeQuery(this.db, this.path, this.filters, this.maximum, typeof id === 'string' ? id : null);
+  }
   async get() {
     const collection = this.db.data[this.path] || {};
     const docs = Object.entries(collection)
@@ -157,7 +163,26 @@ class FakeFirestore {
   }
 }
 
+class FakeTaskQueue {
+  constructor() {
+    this.enqueuedTasks = [];
+    this.taskMap = new Map();
+  }
+  async enqueue(payload, options = {}) {
+    if (options.id && this.taskMap.has(options.id)) {
+      const err = new Error(`Task ${options.id} already exists`);
+      err.code = 'functions/task-already-exists';
+      throw err;
+    }
+    const task = { payload, options, id: options.id || `auto-task-${this.enqueuedTasks.length + 1}` };
+    this.enqueuedTasks.push(task);
+    if (options.id) this.taskMap.set(options.id, task);
+    return task;
+  }
+}
+
 module.exports = {
   FakeFirestore,
   FakeTimestamp,
+  FakeTaskQueue,
 };

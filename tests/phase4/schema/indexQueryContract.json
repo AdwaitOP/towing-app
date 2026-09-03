@@ -1,7 +1,7 @@
 {
   "_comment": "Independent Stage 1 query contract. Composite signatures are derived by tests from filters and ordering; direct document lookups and built-in single-field queries explicitly derive no composite. The Firestore Emulator validates rules/query shape but does not prove production composite-index deployment.",
   "baselineCompositeCount": 5,
-  "phase4CompositeCount": 17,
+  "phase4CompositeCount": 19,
   "queries": [
     {
       "name": "baseline_driver_dispatch_listing", "phase": "baseline", "collection": "drivers",
@@ -54,6 +54,11 @@
       "directIdLookup": false
     },
     {
+      "name": "high_water_due_job_offers", "phase": "phase4", "collection": "jobs",
+      "equalityFilters": ["status"], "rangeFilter": "offerExpiresAt",
+      "orderBy": [{ "field": "offerExpiresAt", "direction": "DESCENDING" }], "directIdLookup": false
+    },
+    {
       "name": "pending_cancellation_resolution", "phase": "phase4", "collection": "jobs",
       "equalityFilters": ["cancellationResolutionState"], "rangeFilter": "cancellationRequestedAt",
       "orderBy": [], "directIdLookup": false
@@ -72,6 +77,11 @@
       "name": "expired_offer_reconciliation", "phase": "phase4", "collection": "job_offers",
       "equalityFilters": ["status"], "rangeFilter": "expiresAt", "orderBy": [],
       "directIdLookup": false
+    },
+    {
+      "name": "high_water_pending_offer_enqueues", "phase": "phase4", "collection": "job_offers",
+      "equalityFilters": ["status"], "rangeFilter": "expiresAt",
+      "orderBy": [{ "field": "expiresAt", "direction": "DESCENDING" }], "directIdLookup": false
     },
     {
       "name": "job_generation_offer_sequence", "phase": "phase4", "collection": "job_offers",

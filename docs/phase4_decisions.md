@@ -783,9 +783,39 @@ production migration occurs in Stage 1.
 - Wallet top-up implementation and production validation.
 - Admin/support runbook for exceptional in-progress driver failures.
 
-Each missing value must fail closed or enter operational hold in the later
-implementation. None requires inventing a business rule to implement the
-Stage 1 schema, rules, indexes, and tests.
+## Stage 3 Recovery Checkpoint Contract
+
+Stage 3 offer timeout and enqueue recovery guarantees deterministic, bounded, fair
+progress across worker restarts without starvation or live-lock under continuous arrivals.
+
+1. Persistent checkpoint lives at `dispatch_config/recovery_checkpoints`:
+   - Strict validation: exact keys at root, sweep, and tuple levels; authoritative Firestore Timestamps (exact seconds/nanoseconds); non-empty legal document IDs without slashes; null-pair consistency (`(ts, id)` or `(null, null)`).
+   - `dueOfferSweep`: tracks Category A due offer timeouts with `sweepEpoch` (`1 <= sweepEpoch <= Number.MAX_SAFE_INTEGER`), `cursor: {offerExpiresAt, jobId}`, and `upperBound: {offerExpiresAt, jobId}`.
+   - `pendingEnqueueSweep`: tracks Category B pending task enqueues with `sweepEpoch` (`1 <= sweepEpoch <= Number.MAX_SAFE_INTEGER`), `cursor: {expiresAt, offerId}`, and `upperBound: {expiresAt, offerId}`.
+2. High-water mark candidate acquisition:
+   - Evaluated atomically at sweep start when `upperBound` is null.
+   - Backed by production composite DESC indexes:
+     - Category A: `jobs (status ASC, offerExpiresAt DESC)`
+     - Category B: `job_offers (status ASC, expiresAt DESC)`
+   - High-water candidate validation strictly requires authoritative Firestore Timestamps and legal document IDs; malformed ordering candidates are skipped and never enter checkpoint state.
+3. UpperBound Immutability & Exact Sub-millisecond Ordering:
+   - The acquired `upperBound` tuple is locked for the entire epoch. Mid-sweep cursor advancements never overwrite `upperBound`.
+   - Tuple comparison uses exact Firestore Timestamp ordering (seconds, then nanoseconds) and deterministic document-ID ordinal comparison without lossy millisecond truncation or locale dependencies.
+   - Any new continuous arrivals with keys greater than `upperBound` wait until the subsequent epoch.
+4. Forward Scanner Malformed Record Defense:
+   - Category B forward scan starts at `startAt(new Timestamp(0, 0))` when cursor is null, skipping non-Timestamp prefixes (e.g. `expiresAt: 0`).
+   - Any malformed records returned consume forward-scanned budget, fail closed with zero domain mutations, and are never set as cursor.
+   - Healthy records behind malformed records progress deterministically.
+5. Epoch + Upper-Bound Fencing:
+   - Checkpoint updates and sweep completions CAS-fence against both worker-observed `sweepEpoch` and exact `upperBound` tuple.
+   - Stale workers from prior epochs or divergent bounds fail closed without mutating state or regressing cursors.
+6. Hard Scanned-Doc Budget:
+   - Invocations enforce strict scan budgets (`maxDueScannedPerInvocation`, `maxPendingScannedPerInvocation`) bounding total forward-scanned domain records.
+   - Already-enqueued or non-matching records consume the scan budget and advance the cursor, preventing infinite worker loops on dense spans.
+7. Finite Sweep Completion, Wrap & Epoch Boundary:
+   - When the scanner reaches or passes `upperBound`, the sweep atomically completes: `sweepEpoch` increments by 1 (guarded against overflow at `MAX_SAFE_INTEGER`), and cursor and `upperBound` reset to null.
+   - Loader accepts `1 <= sweepEpoch <= Number.MAX_SAFE_INTEGER`.
+   - Transient failures skipped during sweep $N$ are revisited in sweep $N+1$.
 
 ## Stage 0+1 targeted-repair status
 

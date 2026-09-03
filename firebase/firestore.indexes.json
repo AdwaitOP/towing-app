@@ -97,6 +97,14 @@
       "collectionGroup": "jobs",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "offerExpiresAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "cancellationResolutionState", "order": "ASCENDING" },
         { "fieldPath": "cancellationRequestedAt", "order": "ASCENDING" }
       ]
@@ -124,6 +132,14 @@
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "job_offers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "expiresAt", "order": "DESCENDING" }
       ]
     },
     {

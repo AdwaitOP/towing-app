@@ -209,6 +209,125 @@ function validateRun(run, job, jobId, runId) {
   return run;
 }
 
+function validateActiveOfferRun(run, job, offer, jobId, offerId, dispatchGeneration) {
+  if (!run || typeof run !== 'object') throw new DispatchError('RUN_INVALID');
+  if (run.jobId !== jobId || run.generation !== dispatchGeneration) {
+    throw new DispatchError('RUN_GENERATION_MISMATCH');
+  }
+  if (run.status !== 'active' || run.currentOfferId !== offerId || run.finalizedAt !== null) {
+    throw new DispatchError('RUN_CONFLICT');
+  }
+  if (!positive(run.policyVersion) || !exactKeys(run.policySnapshot, POLICY_KEYS) ||
+      !validatePolicy(run.policySnapshot) || !Array.isArray(run.candidates) ||
+      run.candidates.length > run.policySnapshot.maxUniqueCandidatesPerGeneration ||
+      run.candidates.length > 30 ||
+      !Array.isArray(run.attemptedDriverIds) || !Array.isArray(run.excludedDriverIds) ||
+      run.attemptedDriverIds.length > 30 || run.excludedDriverIds.length > 30 ||
+      !Number.isFinite(timestampMillis(run.createdAt)) || !Number.isFinite(timestampMillis(run.updatedAt))) {
+    throw new DispatchError('RUN_INVALID');
+  }
+  if (new Set(run.attemptedDriverIds).size !== run.attemptedDriverIds.length ||
+      new Set(run.excludedDriverIds).size !== run.excludedDriverIds.length) {
+    throw new DispatchError('RUN_INVALID');
+  }
+
+  const k = offer.candidateIndex;
+  if (!nonnegative(k) || k >= run.candidates.length) {
+    throw new DispatchError('CANDIDATE_INDEX_OUT_OF_BOUNDS');
+  }
+  // Exact cursor relation: in Stage 2 runtime, nextCandidateIndex == candidateIndex + 1
+  if (!Number.isSafeInteger(run.nextCandidateIndex) || run.nextCandidateIndex !== k + 1) {
+    throw new DispatchError('RUN_CURSOR_INVALID');
+  }
+
+  const ids = new Set();
+  const expectedAttempted = [];
+  let lastRound = -1;
+
+  for (let i = 0; i < run.candidates.length; i++) {
+    const c = run.candidates[i];
+    if (!exactKeys(c, ['driverId', 'roundIndex', 'haversineDistanceKm', 'matrixEtaSeconds',
+      'matrixDistanceMeters', 'rankingMode', 'outcome', 'reasonCode']) || !text(c.driverId) ||
+      c.driverId.includes('/') || ids.has(c.driverId) || !nonnegative(c.roundIndex) ||
+      c.roundIndex < lastRound || c.roundIndex >= run.policySnapshot.radiusKmSequence.length ||
+      !finiteNonnegative(c.haversineDistanceKm) ||
+      c.haversineDistanceKm > run.policySnapshot.radiusKmSequence[c.roundIndex] ||
+      !(c.reasonCode === null || boundedCode(c.reasonCode))) {
+      throw new DispatchError('RUN_INVALID');
+    }
+    lastRound = c.roundIndex;
+    ids.add(c.driverId);
+
+    if (c.rankingMode === 'ola') {
+      if (!finiteNonnegative(c.matrixEtaSeconds) || !finiteNonnegative(c.matrixDistanceMeters)) {
+        throw new DispatchError('RUN_INVALID');
+      }
+    } else if (c.rankingMode !== 'haversine_degraded' || c.matrixEtaSeconds !== null || c.matrixDistanceMeters !== null) {
+      throw new DispatchError('RUN_INVALID');
+    }
+
+    if (i < k) {
+      // Preceding candidates must have legal terminal non-accepted outcomes
+      if (!['declined', 'expired', 'driver_cancelled', 'skipped'].includes(c.outcome)) {
+        throw new DispatchError('RUN_INVALID');
+      }
+      if (c.outcome === 'skipped') {
+        if (!['driver_ineligible', 'driver_location_stale', 'driver_outside_radius'].includes(c.reasonCode)) {
+          throw new DispatchError('RUN_INVALID');
+        }
+      } else {
+        expectedAttempted.push(c.driverId);
+      }
+    } else if (i === k) {
+      // Current offered candidate
+      if (c.driverId !== offer.driverId) {
+        throw new DispatchError('CANDIDATE_DRIVER_MISMATCH');
+      }
+      if (c.outcome !== 'offered') {
+        throw new DispatchError('CANDIDATE_OUTCOME_CONFLICT');
+      }
+      if (c.reasonCode !== null) {
+        throw new DispatchError('RUN_INVALID');
+      }
+      expectedAttempted.push(c.driverId);
+    } else {
+      // Future candidates (i > k) must remain pending and unattempted
+      if (c.outcome !== 'pending' || c.reasonCode !== null) {
+        throw new DispatchError('RUN_INVALID');
+      }
+      if (run.attemptedDriverIds.includes(c.driverId)) {
+        throw new DispatchError('RUN_ATTEMPTED_DRIVERS_MISMATCH');
+      }
+    }
+  }
+
+  // Attempted history validation
+  if (run.attemptedDriverIds.length !== expectedAttempted.length) {
+    throw new DispatchError('RUN_ATTEMPTED_DRIVERS_MISMATCH');
+  }
+  for (let idx = 0; idx < expectedAttempted.length; idx++) {
+    if (run.attemptedDriverIds[idx] !== expectedAttempted[idx]) {
+      throw new DispatchError('RUN_ATTEMPTED_DRIVERS_MISMATCH');
+    }
+  }
+  const currentOfferedCount = run.attemptedDriverIds.filter(id => id === offer.driverId).length;
+  if (currentOfferedCount !== 1) {
+    throw new DispatchError('RUN_ATTEMPTED_DRIVERS_MISMATCH');
+  }
+
+  // Excluded history validation
+  if (run.excludedDriverIds.some(id => !ids.has(id) || !run.attemptedDriverIds.includes(id))) {
+    throw new DispatchError('RUN_INVALID');
+  }
+  for (const c of run.candidates) {
+    if (c.outcome === 'driver_cancelled' && !run.excludedDriverIds.includes(c.driverId)) {
+      throw new DispatchError('RUN_INVALID');
+    }
+  }
+
+  return run;
+}
+
 module.exports = { DispatchError, POLICY_KEYS, nonnegative, positive, finiteNonnegative, exactKeys,
-  boundedCode, timestampMillis, validCoords, driverCoords, validateDispatchConfig, materializeWorkflow,
-  validatePaidJob, assertNoCancellation, assertAuthority, driverEligibility, validateRun };
+  absent, boundedCode, timestampMillis, validCoords, driverCoords, validateDispatchConfig, materializeWorkflow,
+  validatePaidJob, assertNoCancellation, assertAuthority, driverEligibility, validateRun, validateActiveOfferRun };
