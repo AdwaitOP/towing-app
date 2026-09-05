@@ -757,6 +757,85 @@ function validateCanonicalAcceptedOccurrence({
   return true;
 }
 
+function validateCanonicalDeclineReceipt({
+  receipt,
+  jobId,
+  offerId,
+  driverUid,
+  requestId,
+  TimestampClass,
+}) {
+  if (!receipt || typeof receipt !== 'object') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  const expectedKeys = [
+    'actorUid',
+    'claimedAt',
+    'leaseUntil',
+    'operation',
+    'ownerToken',
+    'payloadHash',
+    'processedAt',
+    'requestId',
+    'resourceId',
+    'result',
+    'status',
+    'type',
+  ];
+  if (!exactKeys(receipt, expectedKeys)) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.requestId !== requestId) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.status !== 'completed') {
+    if (receipt.status === 'in_progress') throw new DispatchError('REQUEST_IN_PROGRESS');
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.type !== 'phase4_client_mutation') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.ownerToken !== null) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!isAuthoritativeTimestamp(receipt.claimedAt, TimestampClass)) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.leaseUntil !== null) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!isAuthoritativeTimestamp(receipt.processedAt, TimestampClass)) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.actorUid !== driverUid) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.operation !== 'decline') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.resourceId !== jobId + ':' + offerId) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  const expectedPayloadHash = crypto.createHash('sha256').update(JSON.stringify({ jobId, offerId }), 'utf8').digest('hex');
+  if (receipt.payloadHash !== expectedPayloadHash) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!receipt.result || typeof receipt.result !== 'object') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  const expectedResultKeys = ['declined', 'driverId', 'jobId', 'offerId'];
+  if (!exactKeys(receipt.result, expectedResultKeys)) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.result.declined !== true ||
+      receipt.result.jobId !== jobId ||
+      receipt.result.offerId !== offerId ||
+      receipt.result.driverId !== driverUid) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  return true;
+}
+
 module.exports = {
   DispatchError, POLICY_KEYS, nonnegative, positive, finiteNonnegative, exactKeys,
   absent, boundedCode, timestampMillis, validCoords, driverCoords, validateDispatchConfig, materializeWorkflow,
@@ -764,4 +843,5 @@ module.exports = {
   validateAcceptanceCancellationProvenance, validateAcceptanceDriverEligibility, validateCancellationPolicy,
   buildCancellationPolicySnapshot, isAuthoritativeTimestamp, validateCanonicalAcceptedOccurrence,
   validateCancellationRamp, validateStoredCancellationPolicySnapshot, validateCleanOfferedJobState,
+  validateCanonicalDeclineReceipt,
 };

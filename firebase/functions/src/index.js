@@ -81,6 +81,10 @@ exports.reconcileOfferTimeouts = onSchedule({
 const { acceptJob } = require('./dispatch/acceptJob');
 exports.acceptJob = acceptJob;
 
+// ── Phase 4 Stage 5 driver decline & cascade ─────────────────────────────────
+const { declineJob } = require('./dispatch/declineJob');
+exports.declineJob = declineJob;
+
 // Later Phase 4 stages remain excluded.
 // const { cancelJob } = require('./dispatch/cancelJob');
 // exports.cancelJob = cancelJob;
