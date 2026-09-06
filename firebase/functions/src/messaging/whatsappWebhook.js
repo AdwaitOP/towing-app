@@ -305,6 +305,7 @@ function createWhatsAppWebhook({
         cancelledBy: 'customer',
         cancellationReason: 'customer_requested',
         cancellationRequestedAt: job.cancellationRequestedAt || timestamp,
+        cancellationResolutionState: 'pending',
         updatedAt: timestamp,
       });
       const reply = textReply('Cancellation requested. The booking fee is non-refundable; dispatch resolution is pending.');

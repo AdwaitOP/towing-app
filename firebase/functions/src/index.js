@@ -90,6 +90,27 @@ const { startJob, completeJob } = require('./dispatch/jobLifecycle');
 exports.startJob = startJob;
 exports.completeJob = completeJob;
 
+// ── Phase 4 Stage 7 customer cancellation resolver ───────────────────────────
+const {
+  productionCustomerCancellationManager,
+  shouldProcessCustomerCancellation,
+} = require('./dispatch/customerCancellation');
+
+exports.resolveJobCancellation = onDocumentWritten({
+  document: 'jobs/{jobId}', retry: true,
+}, async event => {
+  if (!shouldProcessCustomerCancellation(event)) return;
+  const result = await productionCustomerCancellationManager().resolveCustomerCancellation({ jobId: event.params.jobId });
+  if (result) logger.info('Customer cancellation resolution result', result);
+});
+
+exports.reconcileCustomerCancellations = onSchedule({
+  schedule: process.env.CUSTOMER_CANCELLATION_RECONCILE_SCHEDULE || process.env.DISPATCH_RECONCILE_SCHEDULE || '',
+  timeZone: 'Asia/Kolkata',
+}, async () => {
+  logger.info('Customer cancellation sweep result', await productionCustomerCancellationManager().reconcileCustomerCancellations());
+});
+
 // Later Phase 4 stages remain excluded.
 // const { cancelJob } = require('./dispatch/cancelJob');
 // exports.cancelJob = cancelJob;

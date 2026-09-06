@@ -218,8 +218,48 @@ test('offered cancellation records Phase 4 marker without rewriting job state', 
   const job = setup.db.read('jobs', 'job-1');
   assert.equal(job.status, 'offered');
   assert.equal(job.cancelledBy, 'customer');
+  assert.equal(job.cancellationReason, 'customer_requested');
+  assert.equal(job.cancellationResolutionState, 'pending');
   assert.ok(job.cancellationRequestedAt);
   assert.equal(setup.db.read('whatsapp_sessions', phone).jobId, 'job-1');
+});
+
+test('accepted cancellation records Phase 4 pending marker without rewriting job state', async () => {
+  const setup = setupCancellation({
+    job: {
+      status: 'accepted',
+      assignedDriver: 'driver-1',
+      razorpayPaymentId: 'pay_PAYMENT1',
+      paymentConfirmedAt: FakeTimestamp.fromMillis(now - 1),
+    },
+  });
+  await setup.webhook.processMessage(phone, cancelMessage, 'cancel-1', 'owner-1');
+  const job = setup.db.read('jobs', 'job-1');
+  assert.equal(job.status, 'accepted');
+  assert.equal(job.assignedDriver, 'driver-1');
+  assert.equal(job.cancelledBy, 'customer');
+  assert.equal(job.cancellationReason, 'customer_requested');
+  assert.equal(job.cancellationResolutionState, 'pending');
+  assert.ok(job.cancellationRequestedAt);
+});
+
+test('in_progress cancellation records Phase 4 pending marker without rewriting job state', async () => {
+  const setup = setupCancellation({
+    job: {
+      status: 'in_progress',
+      assignedDriver: 'driver-1',
+      razorpayPaymentId: 'pay_PAYMENT1',
+      paymentConfirmedAt: FakeTimestamp.fromMillis(now - 1),
+    },
+  });
+  await setup.webhook.processMessage(phone, cancelMessage, 'cancel-1', 'owner-1');
+  const job = setup.db.read('jobs', 'job-1');
+  assert.equal(job.status, 'in_progress');
+  assert.equal(job.assignedDriver, 'driver-1');
+  assert.equal(job.cancelledBy, 'customer');
+  assert.equal(job.cancellationReason, 'customer_requested');
+  assert.equal(job.cancellationResolutionState, 'pending');
+  assert.ok(job.cancellationRequestedAt);
 });
 
 test('completed cancellation does not corrupt completed-job audit fields', async () => {
