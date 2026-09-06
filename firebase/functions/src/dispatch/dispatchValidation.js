@@ -330,6 +330,145 @@ function validateActiveOfferRun(run, job, offer, jobId, offerId, dispatchGenerat
   return run;
 }
 
+function validateCanonicalAssignedRun({ run, job, offer, jobId, offerId, driverUid, TimestampClass }) {
+  if (!run || typeof run !== 'object') throw new DispatchError('RUN_NOT_FOUND');
+  if (run.jobId !== jobId) throw new DispatchError('RUN_GENERATION_MISMATCH');
+  if (run.generation !== job.dispatchGeneration) throw new DispatchError('RUN_GENERATION_MISMATCH');
+  if (job.dispatchRunId !== String(job.dispatchGeneration)) throw new DispatchError('JOB_RUN_MISMATCH');
+  if (run.status !== 'assigned') throw new DispatchError('RUN_CONFLICT');
+  if (run.currentOfferId !== offerId) throw new DispatchError('RUN_OFFER_MISMATCH');
+  if (run.finalizedAt !== null) throw new DispatchError('RUN_FINALIZED');
+
+  if (!positive(run.policyVersion) || !exactKeys(run.policySnapshot, POLICY_KEYS) ||
+      !validatePolicy(run.policySnapshot) || !Array.isArray(run.candidates) ||
+      run.candidates.length > run.policySnapshot.maxUniqueCandidatesPerGeneration ||
+      run.candidates.length > 30 ||
+      !Array.isArray(run.attemptedDriverIds) || !Array.isArray(run.excludedDriverIds) ||
+      run.attemptedDriverIds.length > 30 || run.excludedDriverIds.length > 30 ||
+      !isAuthoritativeTimestamp(run.createdAt, TimestampClass) ||
+      !isAuthoritativeTimestamp(run.updatedAt, TimestampClass)) {
+    throw new DispatchError('RUN_INVALID');
+  }
+
+  if (new Set(run.attemptedDriverIds).size !== run.attemptedDriverIds.length ||
+      new Set(run.excludedDriverIds).size !== run.excludedDriverIds.length) {
+    throw new DispatchError('RUN_INVALID');
+  }
+
+  const k = offer.candidateIndex;
+  if (!nonnegative(k) || k >= run.candidates.length) {
+    throw new DispatchError('CANDIDATE_INDEX_OUT_OF_BOUNDS');
+  }
+  if (!Number.isSafeInteger(run.nextCandidateIndex) || run.nextCandidateIndex !== k + 1) {
+    throw new DispatchError('RUN_CURSOR_INVALID');
+  }
+
+  const ids = new Set();
+  const rounds = new Map();
+  const expectedAttempted = [];
+  let lastRound = -1;
+  let acceptedCount = 0;
+
+  for (let i = 0; i < run.candidates.length; i++) {
+    const c = run.candidates[i];
+    if (!exactKeys(c, ['driverId', 'roundIndex', 'haversineDistanceKm', 'matrixEtaSeconds',
+      'matrixDistanceMeters', 'rankingMode', 'outcome', 'reasonCode']) || !text(c.driverId) ||
+      c.driverId.includes('/') || ids.has(c.driverId) || !nonnegative(c.roundIndex) ||
+      c.roundIndex < lastRound || c.roundIndex >= run.policySnapshot.radiusKmSequence.length ||
+      !finiteNonnegative(c.haversineDistanceKm) ||
+      c.haversineDistanceKm > run.policySnapshot.radiusKmSequence[c.roundIndex] ||
+      !(c.reasonCode === null || boundedCode(c.reasonCode))) {
+      throw new DispatchError('RUN_INVALID');
+    }
+    lastRound = c.roundIndex;
+    ids.add(c.driverId);
+    rounds.set(c.roundIndex, (rounds.get(c.roundIndex) || 0) + 1);
+    if (rounds.get(c.roundIndex) > run.policySnapshot.maxMatrixShortlistPerRound) {
+      throw new DispatchError('RUN_INVALID');
+    }
+
+    if (c.rankingMode === 'ola') {
+      if (!finiteNonnegative(c.matrixEtaSeconds) || !finiteNonnegative(c.matrixDistanceMeters)) {
+        throw new DispatchError('RUN_INVALID');
+      }
+    } else if (c.rankingMode !== 'haversine_degraded' || c.matrixEtaSeconds !== null || c.matrixDistanceMeters !== null) {
+      throw new DispatchError('RUN_INVALID');
+    }
+
+    if (c.outcome === 'accepted') {
+      acceptedCount++;
+    }
+
+    if (i < k) {
+      if (!['declined', 'expired', 'driver_cancelled', 'skipped'].includes(c.outcome)) {
+        throw new DispatchError('RUN_INVALID');
+      }
+      if (c.outcome === 'skipped') {
+        if (!['driver_ineligible', 'driver_location_stale', 'driver_outside_radius'].includes(c.reasonCode)) {
+          throw new DispatchError('RUN_INVALID');
+        }
+      } else {
+        expectedAttempted.push(c.driverId);
+      }
+    } else if (i === k) {
+      if (c.driverId !== driverUid) {
+        throw new DispatchError('CANDIDATE_MISMATCH');
+      }
+      if (c.outcome !== 'accepted') {
+        throw new DispatchError('CANDIDATE_MISMATCH');
+      }
+      if (c.reasonCode !== null) {
+        throw new DispatchError('RUN_INVALID');
+      }
+      if (run.excludedDriverIds.includes(c.driverId)) {
+        throw new DispatchError('RUN_INVALID');
+      }
+      expectedAttempted.push(c.driverId);
+    } else {
+      if (c.outcome !== 'pending' || c.reasonCode !== null) {
+        throw new DispatchError('RUN_INVALID');
+      }
+      if (run.attemptedDriverIds.includes(c.driverId)) {
+        throw new DispatchError('RUN_ATTEMPTED_DRIVERS_MISMATCH');
+      }
+      if (run.excludedDriverIds.includes(c.driverId)) {
+        throw new DispatchError('RUN_INVALID');
+      }
+    }
+  }
+
+  if (acceptedCount !== 1) {
+    throw new DispatchError('RUN_INVALID');
+  }
+
+  if (run.attemptedDriverIds.length !== expectedAttempted.length) {
+    throw new DispatchError('RUN_ATTEMPTED_DRIVERS_MISMATCH');
+  }
+  for (let idx = 0; idx < expectedAttempted.length; idx++) {
+    if (run.attemptedDriverIds[idx] !== expectedAttempted[idx]) {
+      throw new DispatchError('RUN_ATTEMPTED_DRIVERS_MISMATCH');
+    }
+  }
+  const currentAcceptedCount = run.attemptedDriverIds.filter(id => id === driverUid).length;
+  if (currentAcceptedCount !== 1) {
+    throw new DispatchError('RUN_ATTEMPTED_DRIVERS_MISMATCH');
+  }
+
+  if (run.excludedDriverIds.some(id => !ids.has(id) || !run.attemptedDriverIds.includes(id))) {
+    throw new DispatchError('RUN_INVALID');
+  }
+  if (run.excludedDriverIds.includes(driverUid)) {
+    throw new DispatchError('RUN_INVALID');
+  }
+  for (const c of run.candidates) {
+    if (c.outcome === 'driver_cancelled' && !run.excludedDriverIds.includes(c.driverId)) {
+      throw new DispatchError('RUN_INVALID');
+    }
+  }
+
+  return true;
+}
+
 function validateAcceptanceCancellationProvenance(job, offer) {
   const hasReq = !absent(job.cancellationRequestedAt);
   const hasResAt = !absent(job.cancellationResolvedAt);
@@ -365,6 +504,45 @@ function isAuthoritativeTimestamp(val, TimestampClass) {
     }
   }
   return false;
+}
+
+function compareTimestamps(a, b, TimestampClass) {
+  if (!a || typeof a !== 'object' || !b || typeof b !== 'object') {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+  if (a instanceof Date || b instanceof Date) {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+  if (TimestampClass) {
+    if (!(a instanceof TimestampClass) || !(b instanceof TimestampClass)) {
+      throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+    }
+  } else {
+    if (!isAuthoritativeTimestamp(a) || !isAuthoritativeTimestamp(b)) {
+      throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+    }
+  }
+  if (!Number.isInteger(a.seconds) || !Number.isInteger(a.nanoseconds) ||
+      a.nanoseconds < 0 || a.nanoseconds >= 1e9 ||
+      !Number.isInteger(b.seconds) || !Number.isInteger(b.nanoseconds) ||
+      b.nanoseconds < 0 || b.nanoseconds >= 1e9) {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+  if (a.seconds !== b.seconds) {
+    return a.seconds < b.seconds ? -1 : 1;
+  }
+  if (a.nanoseconds !== b.nanoseconds) {
+    return a.nanoseconds < b.nanoseconds ? -1 : 1;
+  }
+  return 0;
+}
+
+function timestampsEqual(a, b, TimestampClass) {
+  return compareTimestamps(a, b, TimestampClass) === 0;
+}
+
+function timestampLessThanOrEqual(a, b, TimestampClass) {
+  return compareTimestamps(a, b, TimestampClass) <= 0;
 }
 
 function validateAcceptanceDriverEligibility(driver, job, offerId, nowMs, TimestampClass) {
@@ -836,12 +1014,631 @@ function validateCanonicalDeclineReceipt({
   return true;
 }
 
+const OUTBOX_ALLOWED_STATES = Object.freeze(['pending', 'in_progress', 'retry_wait', 'sent', 'failed_terminal']);
+const OUTBOX_ALLOWED_ERROR_CODES = Object.freeze([
+  'provider_unavailable',
+  'provider_rate_limited',
+  'provider_rejected_message',
+  'provider_unknown_error',
+  'recipient_unreachable',
+  'configuration_missing',
+  'internal_error',
+]);
+const OUTBOX_EXACT_KEYS = Object.freeze([
+  'attemptCount', 'channel', 'createdAt', 'eventId', 'eventType', 'lastErrorCode',
+  'leaseUntil', 'nextAttemptAt', 'ownerToken', 'payload', 'payloadVersion',
+  'providerMessageId', 'recipientKey', 'resourceId', 'resourceType', 'sentAt',
+  'state', 'updatedAt',
+]);
+
+function validateCanonicalOutboxRecord({
+  outbox,
+  expectedEventId,
+  expectedEventType,
+  expectedResourceType = 'job',
+  expectedResourceId,
+  expectedJobStatus,
+  TimestampClass,
+}) {
+  if (!outbox || typeof outbox !== 'object' || Array.isArray(outbox)) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (!exactKeys(outbox, OUTBOX_EXACT_KEYS)) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (outbox.eventId !== expectedEventId || outbox.eventType !== expectedEventType) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (outbox.resourceType !== expectedResourceType || outbox.resourceId !== expectedResourceId) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (outbox.channel !== 'whatsapp') {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (outbox.recipientKey !== 'customer:' + expectedResourceId) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (outbox.payloadVersion !== 1) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (!outbox.payload || typeof outbox.payload !== 'object' || Array.isArray(outbox.payload)) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (!exactKeys(outbox.payload, ['jobId', 'jobStatus', 'refundAmountPaise'])) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (outbox.payload.jobId !== expectedResourceId ||
+      outbox.payload.jobStatus !== expectedJobStatus ||
+      outbox.payload.refundAmountPaise !== null) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (!OUTBOX_ALLOWED_STATES.includes(outbox.state)) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (!Number.isSafeInteger(outbox.attemptCount) || outbox.attemptCount < 0) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (!isAuthoritativeTimestamp(outbox.createdAt, TimestampClass) ||
+      !isAuthoritativeTimestamp(outbox.updatedAt, TimestampClass)) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (outbox.lastErrorCode !== null && !OUTBOX_ALLOWED_ERROR_CODES.includes(outbox.lastErrorCode)) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+  if (outbox.providerMessageId !== null && (typeof outbox.providerMessageId !== 'string' || outbox.providerMessageId.length === 0)) {
+    throw new DispatchError('OUTBOX_INVALID');
+  }
+
+  // State-specific invariants strictly matching notification_outbox_schema.json
+  if (outbox.state === 'pending') {
+    if (outbox.attemptCount !== 0 ||
+        outbox.ownerToken !== null ||
+        outbox.leaseUntil !== null ||
+        !isAuthoritativeTimestamp(outbox.nextAttemptAt, TimestampClass) ||
+        outbox.providerMessageId !== null ||
+        outbox.lastErrorCode !== null ||
+        outbox.sentAt !== null) {
+      throw new DispatchError('OUTBOX_INVALID');
+    }
+  } else if (outbox.state === 'in_progress') {
+    if (outbox.attemptCount < 1 ||
+        typeof outbox.ownerToken !== 'string' || outbox.ownerToken.length === 0 ||
+        !isAuthoritativeTimestamp(outbox.leaseUntil, TimestampClass) ||
+        outbox.providerMessageId !== null ||
+        outbox.sentAt !== null) {
+      throw new DispatchError('OUTBOX_INVALID');
+    }
+    if (outbox.nextAttemptAt !== null && !isAuthoritativeTimestamp(outbox.nextAttemptAt, TimestampClass)) {
+      throw new DispatchError('OUTBOX_INVALID');
+    }
+    if (outbox.lastErrorCode !== null && !OUTBOX_ALLOWED_ERROR_CODES.includes(outbox.lastErrorCode)) {
+      throw new DispatchError('OUTBOX_INVALID');
+    }
+  } else if (outbox.state === 'retry_wait') {
+    if (outbox.attemptCount < 1 ||
+        outbox.ownerToken !== null ||
+        outbox.leaseUntil !== null ||
+        !isAuthoritativeTimestamp(outbox.nextAttemptAt, TimestampClass) ||
+        !OUTBOX_ALLOWED_ERROR_CODES.includes(outbox.lastErrorCode) ||
+        outbox.providerMessageId !== null ||
+        outbox.sentAt !== null) {
+      throw new DispatchError('OUTBOX_INVALID');
+    }
+  } else if (outbox.state === 'sent') {
+    if (outbox.attemptCount < 1 ||
+        outbox.ownerToken !== null ||
+        outbox.leaseUntil !== null ||
+        !isAuthoritativeTimestamp(outbox.sentAt, TimestampClass) ||
+        typeof outbox.providerMessageId !== 'string' || outbox.providerMessageId.length === 0 ||
+        outbox.lastErrorCode !== null) {
+      throw new DispatchError('OUTBOX_INVALID');
+    }
+    if (outbox.nextAttemptAt !== null && !isAuthoritativeTimestamp(outbox.nextAttemptAt, TimestampClass)) {
+      throw new DispatchError('OUTBOX_INVALID');
+    }
+  } else if (outbox.state === 'failed_terminal') {
+    if (outbox.attemptCount < 1 ||
+        outbox.ownerToken !== null ||
+        outbox.leaseUntil !== null ||
+        !OUTBOX_ALLOWED_ERROR_CODES.includes(outbox.lastErrorCode) ||
+        outbox.sentAt !== null) {
+      throw new DispatchError('OUTBOX_INVALID');
+    }
+    if (outbox.nextAttemptAt !== null && !isAuthoritativeTimestamp(outbox.nextAttemptAt, TimestampClass)) {
+      throw new DispatchError('OUTBOX_INVALID');
+    }
+    if (outbox.providerMessageId !== null && (typeof outbox.providerMessageId !== 'string' || outbox.providerMessageId.length === 0)) {
+      throw new DispatchError('OUTBOX_INVALID');
+    }
+  }
+
+  return true;
+}
+
+const PHASE4_RECEIPT_EXACT_KEYS = Object.freeze([
+  'actorUid', 'claimedAt', 'leaseUntil', 'operation', 'ownerToken',
+  'payloadHash', 'processedAt', 'requestId', 'resourceId', 'result',
+  'status', 'type',
+]);
+
+function validateCanonicalStartReceipt({
+  receipt,
+  jobId,
+  offerId,
+  driverUid,
+  requestId,
+  TimestampClass,
+}) {
+  if (!receipt || typeof receipt !== 'object') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!exactKeys(receipt, PHASE4_RECEIPT_EXACT_KEYS)) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.requestId !== requestId) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.status !== 'completed') {
+    if (receipt.status === 'in_progress') throw new DispatchError('REQUEST_IN_PROGRESS');
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.type !== 'phase4_client_mutation') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.ownerToken !== null) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!isAuthoritativeTimestamp(receipt.claimedAt, TimestampClass)) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.leaseUntil !== null) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!isAuthoritativeTimestamp(receipt.processedAt, TimestampClass)) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.actorUid !== driverUid) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.operation !== 'start_job') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.resourceId !== jobId + ':' + offerId) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  const expectedPayloadHash = crypto.createHash('sha256').update(JSON.stringify({ jobId, offerId }), 'utf8').digest('hex');
+  if (receipt.payloadHash !== expectedPayloadHash) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!receipt.result || typeof receipt.result !== 'object') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!exactKeys(receipt.result, ['driverId', 'jobId', 'offerId', 'started'])) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.result.started !== true ||
+      receipt.result.jobId !== jobId ||
+      receipt.result.offerId !== offerId ||
+      receipt.result.driverId !== driverUid) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  return true;
+}
+
+function validateCanonicalCompleteReceipt({
+  receipt,
+  jobId,
+  offerId,
+  driverUid,
+  requestId,
+  TimestampClass,
+}) {
+  if (!receipt || typeof receipt !== 'object') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!exactKeys(receipt, PHASE4_RECEIPT_EXACT_KEYS)) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.requestId !== requestId) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.status !== 'completed') {
+    if (receipt.status === 'in_progress') throw new DispatchError('REQUEST_IN_PROGRESS');
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.type !== 'phase4_client_mutation') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.ownerToken !== null) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!isAuthoritativeTimestamp(receipt.claimedAt, TimestampClass)) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.leaseUntil !== null) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!isAuthoritativeTimestamp(receipt.processedAt, TimestampClass)) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.actorUid !== driverUid) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.operation !== 'complete_job') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.resourceId !== jobId + ':' + offerId) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  const expectedPayloadHash = crypto.createHash('sha256').update(JSON.stringify({ jobId, offerId }), 'utf8').digest('hex');
+  if (receipt.payloadHash !== expectedPayloadHash) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!receipt.result || typeof receipt.result !== 'object') {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (!exactKeys(receipt.result, ['completed', 'driverId', 'jobId', 'offerId'])) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  if (receipt.result.completed !== true ||
+      receipt.result.jobId !== jobId ||
+      receipt.result.offerId !== offerId ||
+      receipt.result.driverId !== driverUid) {
+    throw new DispatchError('REQUEST_BINDING_CONFLICT');
+  }
+  return true;
+}
+
+function validateCanonicalStartingAcceptedOccurrence({
+  job,
+  offer,
+  run,
+  driver,
+  ledger,
+  acceptedOutbox,
+  historicalReceipt,
+  jobId,
+  offerId,
+  driverUid,
+  nowMs,
+  TimestampClass,
+}) {
+  // 1. JOB
+  if (!job || typeof job !== 'object') throw new DispatchError('DOCUMENT_NOT_FOUND');
+  if (job.status !== 'accepted') throw new DispatchError('JOB_NOT_ACCEPTED');
+  if (job.dispatchState !== 'assigned') throw new DispatchError('JOB_NOT_ACCEPTED');
+  if (job.assignedDriver !== driverUid) throw new DispatchError('WRONG_DRIVER');
+  if (job.currentOfferId !== offerId) throw new DispatchError('JOB_OFFER_MISMATCH');
+  if (job.offeredTo !== null || job.offeredAt !== null || job.offerExpiresAt !== null) {
+    throw new DispatchError('ACCEPTANCE_CONFLICT');
+  }
+  if (!isAuthoritativeTimestamp(job.acceptedAt, TimestampClass)) {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+  if (job.inProgressAt != null || job.completedAt != null) {
+    throw new DispatchError('ACCEPTANCE_CONFLICT');
+  }
+  const expectedLedgerId = 'commission_debit:' + jobId + ':' + offerId;
+  if (job.commissionDebitEntryId !== expectedLedgerId) throw new DispatchError('LEDGER_INVALID');
+  if (!positive(job.dispatchGeneration) || job.dispatchRunId !== String(job.dispatchGeneration)) {
+    throw new DispatchError('JOB_RUN_MISMATCH');
+  }
+  if (!Number.isSafeInteger(job.stateVersion) || job.stateVersion < 0) {
+    throw new DispatchError('JOB_STATE_VERSION_INVALID');
+  }
+  if (job.stateVersion >= Number.MAX_SAFE_INTEGER) {
+    throw new DispatchError('JOB_STATE_VERSION_INVALID');
+  }
+
+  // Customer cancellation provenance / precedence
+  validateAcceptanceCancellationProvenance(job, offer);
+
+  // Clean terminal/refund fields
+  if (job.cancelledAt != null || job.cancelledBy != null || job.cancellationReason != null ||
+      job.cancellationResolvedAt != null || (job.cancellationResolutionState != null && job.cancellationResolutionState !== 'none')) {
+    throw new DispatchError('ACCEPTANCE_CONFLICT');
+  }
+  if (job.refundRequestId != null || (job.refundState != null && job.refundState !== 'none') ||
+      job.refundNextAttemptAt != null || job.razorpayRefundId != null ||
+      job.refundConfirmedAt != null || job.refundedAmountPaise != null) {
+    throw new DispatchError('ACCEPTANCE_CONFLICT');
+  }
+
+  // 2. OFFER
+  if (!offer || typeof offer !== 'object') throw new DispatchError('DOCUMENT_NOT_FOUND');
+  if (offer.status !== 'accepted') throw new DispatchError('OFFER_NOT_ACCEPTED');
+  if (offer.jobId !== jobId) throw new DispatchError('OFFER_BINDING_MISMATCH');
+  if (offer.driverId !== driverUid) throw new DispatchError('OFFER_DRIVER_MISMATCH');
+  if (offer.dispatchGeneration !== job.dispatchGeneration) throw new DispatchError('OFFER_GENERATION_MISMATCH');
+  if (!Number.isSafeInteger(offer.candidateIndex) || offer.candidateIndex < 0) throw new DispatchError('ACCEPTANCE_CONFLICT');
+  if (!isAuthoritativeTimestamp(offer.acceptedAt, TimestampClass)) throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  if (offer.inProgressAt != null || offer.completedAt != null) throw new DispatchError('ACCEPTANCE_CONFLICT');
+  if (offer.resolvedAt != null || offer.resolutionReason != null) throw new DispatchError('ACCEPTANCE_CONFLICT');
+  if (offer.driverCommissionPaise !== job.driverCommissionPaise) throw new DispatchError('ACCEPTANCE_CONFLICT');
+  validateStoredCancellationPolicySnapshot(offer.cancellationPolicySnapshot, TimestampClass);
+
+  // Timestamps coherence & ordering
+  if (!timestampsEqual(job.acceptedAt, offer.acceptedAt, TimestampClass)) {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+  const boundaryTimestamp = TimestampClass.fromMillis(nowMs);
+  if (!timestampLessThanOrEqual(job.acceptedAt, boundaryTimestamp, TimestampClass)) {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+
+  // 3. RUN
+  validateCanonicalAssignedRun({
+    run,
+    job,
+    offer,
+    jobId,
+    offerId,
+    driverUid,
+    TimestampClass,
+  });
+
+  // 4. DRIVER
+  if (!driver || typeof driver !== 'object') throw new DispatchError('DOCUMENT_NOT_FOUND');
+  if (driver.activeOfferId !== null) throw new DispatchError('DRIVER_ENGAGEMENT_MISMATCH');
+  if (driver.activeJobId !== jobId) throw new DispatchError('DRIVER_ENGAGEMENT_MISMATCH');
+  if (!Number.isSafeInteger(driver.walletBalance) || driver.walletBalance < 0) throw new DispatchError('ACCEPTANCE_CONFLICT');
+
+  // 5. LEDGER
+  if (!ledger || typeof ledger !== 'object') throw new DispatchError('LEDGER_INVALID');
+  if (ledger.operationId !== expectedLedgerId) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.driverId !== driverUid || ledger.jobId !== jobId || ledger.offerId !== offerId) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.type !== 'commission_debit') throw new DispatchError('LEDGER_INVALID');
+  if (ledger.commissionPaise !== job.driverCommissionPaise) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.forfeiturePaise !== 0 || ledger.creditPaise !== 0) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.deltaPaise !== -job.driverCommissionPaise) throw new DispatchError('LEDGER_INVALID');
+  if (!Number.isSafeInteger(ledger.balanceBeforePaise) || ledger.balanceBeforePaise < 0) throw new DispatchError('LEDGER_INVALID');
+  if (!Number.isSafeInteger(ledger.balanceAfterPaise) || ledger.balanceAfterPaise < 0) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.balanceBeforePaise - job.driverCommissionPaise !== ledger.balanceAfterPaise) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.cancellationPolicyEvidence !== null) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.sourceType !== 'driver' || ledger.actorUid !== driverUid) throw new DispatchError('LEDGER_INVALID');
+  if (!isAuthoritativeTimestamp(ledger.createdAt, TimestampClass)) throw new DispatchError('LEDGER_INVALID');
+  if (offer.acceptRequestId !== ledger.sourceRequestId) throw new DispatchError('LEDGER_INVALID');
+
+  // 6. ACCEPTED OUTBOX
+  validateCanonicalOutboxRecord({
+    outbox: acceptedOutbox,
+    expectedEventId: 'job_accepted:' + jobId + ':' + offerId,
+    expectedEventType: 'job_accepted',
+    expectedResourceType: 'job',
+    expectedResourceId: jobId,
+    expectedJobStatus: 'accepted',
+    TimestampClass,
+  });
+
+  // 7. HISTORICAL ACCEPT RECEIPT (if present on offer)
+  if (offer.acceptRequestId !== null) {
+    if (!historicalReceipt || typeof historicalReceipt !== 'object') {
+      throw new DispatchError('ACCEPTANCE_CONFLICT');
+    }
+    if (historicalReceipt.requestId !== offer.acceptRequestId) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (historicalReceipt.status !== 'completed') {
+      if (historicalReceipt.status === 'in_progress') throw new DispatchError('REQUEST_IN_PROGRESS');
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (historicalReceipt.type !== 'phase4_client_mutation') {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (historicalReceipt.actorUid !== driverUid || historicalReceipt.operation !== 'accept' || historicalReceipt.resourceId !== jobId + ':' + offerId) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    const expectedHistPayloadHash = crypto.createHash('sha256').update(JSON.stringify({ jobId, offerId }), 'utf8').digest('hex');
+    if (historicalReceipt.payloadHash !== expectedHistPayloadHash) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (!historicalReceipt.result || typeof historicalReceipt.result !== 'object' ||
+        historicalReceipt.result.accepted !== true || historicalReceipt.result.jobId !== jobId ||
+        historicalReceipt.result.offerId !== offerId || historicalReceipt.result.driverId !== driverUid) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (!isAuthoritativeTimestamp(historicalReceipt.processedAt, TimestampClass) || !isAuthoritativeTimestamp(historicalReceipt.claimedAt, TimestampClass)) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (historicalReceipt.leaseUntil !== null || historicalReceipt.ownerToken !== null) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+  }
+
+  return true;
+}
+
+function validateCanonicalInProgressOccurrence({
+  job,
+  offer,
+  run,
+  driver,
+  ledger,
+  acceptedOutbox,
+  inProgressOutbox,
+  historicalReceipt,
+  jobId,
+  offerId,
+  driverUid,
+  nowMs,
+  TimestampClass,
+}) {
+  // 1. JOB
+  if (!job || typeof job !== 'object') throw new DispatchError('DOCUMENT_NOT_FOUND');
+  if (job.status !== 'in_progress') throw new DispatchError('JOB_NOT_IN_PROGRESS');
+  if (job.dispatchState !== 'assigned') throw new DispatchError('JOB_NOT_IN_PROGRESS');
+  if (job.assignedDriver !== driverUid) throw new DispatchError('WRONG_DRIVER');
+  if (job.currentOfferId !== offerId) throw new DispatchError('JOB_OFFER_MISMATCH');
+  if (job.offeredTo !== null || job.offeredAt !== null || job.offerExpiresAt !== null) {
+    throw new DispatchError('IN_PROGRESS_CONFLICT');
+  }
+  if (!isAuthoritativeTimestamp(job.acceptedAt, TimestampClass)) {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+  if (!isAuthoritativeTimestamp(job.inProgressAt, TimestampClass)) {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+  if (job.completedAt != null) {
+    throw new DispatchError('IN_PROGRESS_CONFLICT');
+  }
+  const expectedLedgerId = 'commission_debit:' + jobId + ':' + offerId;
+  if (job.commissionDebitEntryId !== expectedLedgerId) throw new DispatchError('LEDGER_INVALID');
+  if (!positive(job.dispatchGeneration) || job.dispatchRunId !== String(job.dispatchGeneration)) {
+    throw new DispatchError('JOB_RUN_MISMATCH');
+  }
+  if (!Number.isSafeInteger(job.stateVersion) || job.stateVersion < 0) {
+    throw new DispatchError('JOB_STATE_VERSION_INVALID');
+  }
+  if (job.stateVersion >= Number.MAX_SAFE_INTEGER) {
+    throw new DispatchError('JOB_STATE_VERSION_INVALID');
+  }
+
+  // Customer cancellation provenance / precedence
+  validateAcceptanceCancellationProvenance(job, offer);
+
+  // Clean terminal/refund fields
+  if (job.cancelledAt != null || job.cancelledBy != null || job.cancellationReason != null ||
+      job.cancellationResolvedAt != null || (job.cancellationResolutionState != null && job.cancellationResolutionState !== 'none')) {
+    throw new DispatchError('IN_PROGRESS_CONFLICT');
+  }
+  if (job.refundRequestId != null || (job.refundState != null && job.refundState !== 'none') ||
+      job.refundNextAttemptAt != null || job.razorpayRefundId != null ||
+      job.refundConfirmedAt != null || job.refundedAmountPaise != null) {
+    throw new DispatchError('IN_PROGRESS_CONFLICT');
+  }
+
+  // 2. OFFER
+  if (!offer || typeof offer !== 'object') throw new DispatchError('DOCUMENT_NOT_FOUND');
+  if (offer.status !== 'in_progress') throw new DispatchError('OFFER_NOT_IN_PROGRESS');
+  if (offer.jobId !== jobId) throw new DispatchError('OFFER_BINDING_MISMATCH');
+  if (offer.driverId !== driverUid) throw new DispatchError('OFFER_DRIVER_MISMATCH');
+  if (offer.dispatchGeneration !== job.dispatchGeneration) throw new DispatchError('OFFER_GENERATION_MISMATCH');
+  if (!Number.isSafeInteger(offer.candidateIndex) || offer.candidateIndex < 0) throw new DispatchError('IN_PROGRESS_CONFLICT');
+  if (!isAuthoritativeTimestamp(offer.acceptedAt, TimestampClass)) throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  if (!isAuthoritativeTimestamp(offer.inProgressAt, TimestampClass)) throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  if (offer.completedAt != null) throw new DispatchError('IN_PROGRESS_CONFLICT');
+  if (offer.resolvedAt != null || offer.resolutionReason != null) throw new DispatchError('IN_PROGRESS_CONFLICT');
+  if (offer.driverCommissionPaise !== job.driverCommissionPaise) throw new DispatchError('IN_PROGRESS_CONFLICT');
+  validateStoredCancellationPolicySnapshot(offer.cancellationPolicySnapshot, TimestampClass);
+
+  // Timestamps coherence & ordering
+  if (!timestampsEqual(job.acceptedAt, offer.acceptedAt, TimestampClass)) {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+  if (!timestampsEqual(job.inProgressAt, offer.inProgressAt, TimestampClass)) {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+  if (!timestampLessThanOrEqual(job.acceptedAt, job.inProgressAt, TimestampClass)) {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+  const boundaryTimestamp = TimestampClass.fromMillis(nowMs);
+  if (!timestampLessThanOrEqual(job.inProgressAt, boundaryTimestamp, TimestampClass)) {
+    throw new DispatchError('LIFECYCLE_TIMESTAMP_INVALID');
+  }
+
+  // 3. RUN
+  validateCanonicalAssignedRun({
+    run,
+    job,
+    offer,
+    jobId,
+    offerId,
+    driverUid,
+    TimestampClass,
+  });
+
+  // 4. DRIVER
+  if (!driver || typeof driver !== 'object') throw new DispatchError('DOCUMENT_NOT_FOUND');
+  if (driver.activeOfferId !== null) throw new DispatchError('DRIVER_ENGAGEMENT_MISMATCH');
+  if (driver.activeJobId !== jobId) throw new DispatchError('DRIVER_ENGAGEMENT_MISMATCH');
+  if (!Number.isSafeInteger(driver.walletBalance) || driver.walletBalance < 0) throw new DispatchError('IN_PROGRESS_CONFLICT');
+
+  // 5. LEDGER
+  if (!ledger || typeof ledger !== 'object') throw new DispatchError('LEDGER_INVALID');
+  if (ledger.operationId !== expectedLedgerId) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.driverId !== driverUid || ledger.jobId !== jobId || ledger.offerId !== offerId) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.type !== 'commission_debit') throw new DispatchError('LEDGER_INVALID');
+  if (ledger.commissionPaise !== job.driverCommissionPaise) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.forfeiturePaise !== 0 || ledger.creditPaise !== 0) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.deltaPaise !== -job.driverCommissionPaise) throw new DispatchError('LEDGER_INVALID');
+  if (!Number.isSafeInteger(ledger.balanceBeforePaise) || ledger.balanceBeforePaise < 0) throw new DispatchError('LEDGER_INVALID');
+  if (!Number.isSafeInteger(ledger.balanceAfterPaise) || ledger.balanceAfterPaise < 0) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.balanceBeforePaise - job.driverCommissionPaise !== ledger.balanceAfterPaise) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.cancellationPolicyEvidence !== null) throw new DispatchError('LEDGER_INVALID');
+  if (ledger.sourceType !== 'driver' || ledger.actorUid !== driverUid) throw new DispatchError('LEDGER_INVALID');
+  if (!isAuthoritativeTimestamp(ledger.createdAt, TimestampClass)) throw new DispatchError('LEDGER_INVALID');
+  if (offer.acceptRequestId !== ledger.sourceRequestId) throw new DispatchError('LEDGER_INVALID');
+
+  // 6. ACCEPTED OUTBOX
+  validateCanonicalOutboxRecord({
+    outbox: acceptedOutbox,
+    expectedEventId: 'job_accepted:' + jobId + ':' + offerId,
+    expectedEventType: 'job_accepted',
+    expectedResourceType: 'job',
+    expectedResourceId: jobId,
+    expectedJobStatus: 'accepted',
+    TimestampClass,
+  });
+
+  // 7. IN_PROGRESS OUTBOX
+  validateCanonicalOutboxRecord({
+    outbox: inProgressOutbox,
+    expectedEventId: 'job_in_progress:' + jobId,
+    expectedEventType: 'job_in_progress',
+    expectedResourceType: 'job',
+    expectedResourceId: jobId,
+    expectedJobStatus: 'in_progress',
+    TimestampClass,
+  });
+
+  // 8. HISTORICAL ACCEPT RECEIPT (if present on offer)
+  if (offer.acceptRequestId !== null) {
+    if (!historicalReceipt || typeof historicalReceipt !== 'object') {
+      throw new DispatchError('IN_PROGRESS_CONFLICT');
+    }
+    if (historicalReceipt.requestId !== offer.acceptRequestId) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (historicalReceipt.status !== 'completed') {
+      if (historicalReceipt.status === 'in_progress') throw new DispatchError('REQUEST_IN_PROGRESS');
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (historicalReceipt.type !== 'phase4_client_mutation') {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (historicalReceipt.actorUid !== driverUid || historicalReceipt.operation !== 'accept' || historicalReceipt.resourceId !== jobId + ':' + offerId) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    const expectedHistPayloadHash = crypto.createHash('sha256').update(JSON.stringify({ jobId, offerId }), 'utf8').digest('hex');
+    if (historicalReceipt.payloadHash !== expectedHistPayloadHash) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (!historicalReceipt.result || typeof historicalReceipt.result !== 'object' ||
+        historicalReceipt.result.accepted !== true || historicalReceipt.result.jobId !== jobId ||
+        historicalReceipt.result.offerId !== offerId || historicalReceipt.result.driverId !== driverUid) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (!isAuthoritativeTimestamp(historicalReceipt.processedAt, TimestampClass) || !isAuthoritativeTimestamp(historicalReceipt.claimedAt, TimestampClass)) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+    if (historicalReceipt.leaseUntil !== null || historicalReceipt.ownerToken !== null) {
+      throw new DispatchError('REQUEST_BINDING_CONFLICT');
+    }
+  }
+
+  return true;
+}
+
 module.exports = {
   DispatchError, POLICY_KEYS, nonnegative, positive, finiteNonnegative, exactKeys,
   absent, boundedCode, timestampMillis, validCoords, driverCoords, validateDispatchConfig, materializeWorkflow,
   validatePaidJob, assertNoCancellation, assertAuthority, driverEligibility, validateRun, validateActiveOfferRun,
+  validateCanonicalAssignedRun, compareTimestamps, timestampsEqual, timestampLessThanOrEqual,
   validateAcceptanceCancellationProvenance, validateAcceptanceDriverEligibility, validateCancellationPolicy,
   buildCancellationPolicySnapshot, isAuthoritativeTimestamp, validateCanonicalAcceptedOccurrence,
   validateCancellationRamp, validateStoredCancellationPolicySnapshot, validateCleanOfferedJobState,
   validateCanonicalDeclineReceipt,
+  OUTBOX_ALLOWED_STATES, OUTBOX_ALLOWED_ERROR_CODES, OUTBOX_EXACT_KEYS,
+  validateCanonicalOutboxRecord, validateCanonicalStartReceipt, validateCanonicalCompleteReceipt,
+  validateCanonicalStartingAcceptedOccurrence, validateCanonicalInProgressOccurrence,
 };

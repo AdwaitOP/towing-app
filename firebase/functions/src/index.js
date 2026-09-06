@@ -85,6 +85,11 @@ exports.acceptJob = acceptJob;
 const { declineJob } = require('./dispatch/declineJob');
 exports.declineJob = declineJob;
 
+// ── Phase 4 Stage 6 tow lifecycle (startJob + completeJob) ───────────────────
+const { startJob, completeJob } = require('./dispatch/jobLifecycle');
+exports.startJob = startJob;
+exports.completeJob = completeJob;
+
 // Later Phase 4 stages remain excluded.
 // const { cancelJob } = require('./dispatch/cancelJob');
 // exports.cancelJob = cancelJob;

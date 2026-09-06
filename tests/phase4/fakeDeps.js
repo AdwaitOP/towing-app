@@ -4,7 +4,17 @@ const { GeoPoint } = require('firebase-admin/firestore');
 
 // Do not import Phase 3's fakeDeps: it globally replaces module loading.
 class FakeTimestamp {
-  constructor(ms) { this.ms = ms; }
+  constructor(secondsOrMs, nanoseconds) {
+    if (typeof nanoseconds === 'number') {
+      this.seconds = secondsOrMs;
+      this.nanoseconds = nanoseconds;
+      this.ms = Math.floor(secondsOrMs * 1000 + nanoseconds / 1e6);
+    } else {
+      this.ms = secondsOrMs;
+      this.seconds = Math.floor(secondsOrMs / 1000);
+      this.nanoseconds = Math.floor((secondsOrMs % 1000) * 1e6);
+    }
+  }
   static fromMillis(ms) { return new FakeTimestamp(ms); }
   toMillis() { return this.ms; }
   toDate() { return new Date(this.ms); }
@@ -12,7 +22,7 @@ class FakeTimestamp {
 
 function clone(value) {
   if (value === undefined || value === null) return value;
-  if (value instanceof FakeTimestamp) return new FakeTimestamp(value.toMillis());
+  if (value instanceof FakeTimestamp) return new FakeTimestamp(value.seconds, value.nanoseconds);
   if (value instanceof GeoPoint) return new GeoPoint(value.latitude, value.longitude);
   if (value instanceof Date) return new Date(value.getTime());
   if (Array.isArray(value)) return value.map(clone);
