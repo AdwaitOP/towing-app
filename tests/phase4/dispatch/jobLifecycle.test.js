@@ -3094,4 +3094,3 @@ test('102. startJob & completeJob: duplicate/malformed excludedDriverIds continu
   );
   assert.deepEqual(captureFullDbSnapshot(compDupDb), compDupBefore);
 });
-
