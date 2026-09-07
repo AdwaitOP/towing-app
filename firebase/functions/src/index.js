@@ -111,9 +111,9 @@ exports.reconcileCustomerCancellations = onSchedule({
   logger.info('Customer cancellation sweep result', await productionCustomerCancellationManager().reconcileCustomerCancellations());
 });
 
-// Later Phase 4 stages remain excluded.
-// const { cancelJob } = require('./dispatch/cancelJob');
-// exports.cancelJob = cancelJob;
+// ── Phase 4 Stage 8 driver cancellation & forfeiture ramp ────────────────────
+const { cancelJob } = require('./dispatch/cancelJob');
+exports.cancelJob = cancelJob;
 
 
 // ── Phase 6 (placeholder) ────────────────────────────────────────────────────
