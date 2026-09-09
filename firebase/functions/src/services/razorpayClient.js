@@ -20,6 +20,12 @@ function createRazorpayClient({
 } = {}) {
   if (typeof fetchImpl !== 'function') throw new TypeError('fetch implementation is required');
 
+  function assertConfigured() {
+    requireEnv('RAZORPAY_KEY_ID', env);
+    requireEnv('RAZORPAY_KEY_SECRET', env);
+    return true;
+  }
+
   function authHeader() {
     const keyId = requireEnv('RAZORPAY_KEY_ID', env);
     const keySecret = requireEnv('RAZORPAY_KEY_SECRET', env);
@@ -128,7 +134,44 @@ function createRazorpayClient({
     return entity;
   }
 
-  return { createPaymentLink, getPaymentLinksByReferenceId, getPaymentLink, cancelPaymentLink };
+  async function createRefund({ paymentId, amount, idempotencyKey }) {
+    assertPaymentId(paymentId);
+    assertAmount(amount);
+    assertIdempotencyKey(idempotencyKey);
+    const entity = await requestJson(
+      `https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}/refund`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Refund-Idempotency': idempotencyKey,
+        },
+        body: JSON.stringify({ amount }),
+      }
+    );
+    return validateRefundResponse(entity, { paymentId, amount });
+  }
+
+  async function getRefund({ paymentId, refundId, amount = null }) {
+    assertPaymentId(paymentId);
+    assertRefundId(refundId);
+    if (amount !== null) assertAmount(amount);
+    const entity = await requestJson(
+      `https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}/refunds/${encodeURIComponent(refundId)}`,
+      { method: 'GET' }
+    );
+    return validateRefundResponse(entity, { paymentId, refundId, amount });
+  }
+
+  return {
+    assertConfigured,
+    createPaymentLink,
+    getPaymentLinksByReferenceId,
+    getPaymentLink,
+    cancelPaymentLink,
+    createRefund,
+    getRefund,
+  };
 }
 
 function validatePaymentLink(link, { referenceId, amount, allowedStatuses = ['created', 'paid'] }) {
@@ -169,6 +212,55 @@ function assertAmount(amount) {
   if (!Number.isSafeInteger(amount) || amount <= 0) throw new TypeError('amount must be positive integer paise');
 }
 
+function assertPaymentId(id) {
+  if (typeof id !== 'string' || !/^pay_[A-Za-z0-9]+$/.test(id)) {
+    throw new TypeError('Invalid Razorpay Payment ID');
+  }
+}
+
+function assertRefundId(id) {
+  if (typeof id !== 'string' || !/^rfnd_[A-Za-z0-9]+$/.test(id) || id.length < 10) {
+    throw new TypeError('Invalid Razorpay Refund ID');
+  }
+}
+
+function assertIdempotencyKey(key) {
+  if (typeof key !== 'string' || !key.trim() || key.length < 10) {
+    throw new TypeError('idempotencyKey must be a non-empty string of at least 10 characters');
+  }
+}
+
+function validateRefundResponse(refund, { paymentId, amount = null, refundId = null } = {}) {
+  if (!refund || typeof refund !== 'object' || Array.isArray(refund)) {
+    throw new ProviderResponseError('Invalid refund response shape');
+  }
+  if (refund.entity !== 'refund') {
+    throw new ProviderResponseError('Refund response entity mismatch');
+  }
+  if (typeof refund.id !== 'string' || !/^rfnd_[A-Za-z0-9]+$/.test(refund.id) || refund.id.length < 10) {
+    throw new ProviderResponseError('Refund response id is invalid');
+  }
+  if (refundId !== null && refund.id !== refundId) {
+    throw new ProviderResponseError('Refund response id does not match requested refund ID');
+  }
+  if (refund.payment_id !== paymentId) {
+    throw new ProviderResponseError('Refund response payment_id mismatch');
+  }
+  if (!Number.isSafeInteger(refund.amount) || refund.amount <= 0) {
+    throw new ProviderResponseError('Refund response amount is not a positive safe integer');
+  }
+  if (amount !== null && refund.amount !== amount) {
+    throw new ProviderResponseError('Refund response amount mismatch');
+  }
+  if (!['pending', 'processed', 'failed'].includes(refund.status)) {
+    throw new ProviderResponseError('Refund response status is invalid');
+  }
+  if ('currency' in refund && typeof refund.currency !== 'string') {
+    throw new ProviderResponseError('Refund response currency must be a string if present');
+  }
+  return refund;
+}
+
 function parseJson(raw) {
   try { return JSON.parse(raw); } catch { return null; }
 }
@@ -184,8 +276,12 @@ module.exports = {
   ProviderResponseError,
   createRazorpayClient,
   validatePaymentLink,
+  validateRefundResponse,
+  assertConfigured: (...args) => getDefaultClient().assertConfigured(...args),
   createPaymentLink: (...args) => getDefaultClient().createPaymentLink(...args),
   getPaymentLinksByReferenceId: (...args) => getDefaultClient().getPaymentLinksByReferenceId(...args),
   getPaymentLink: (...args) => getDefaultClient().getPaymentLink(...args),
   cancelPaymentLink: (...args) => getDefaultClient().cancelPaymentLink(...args),
+  createRefund: (...args) => getDefaultClient().createRefund(...args),
+  getRefund: (...args) => getDefaultClient().getRefund(...args),
 };

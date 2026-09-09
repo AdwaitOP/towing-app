@@ -228,3 +228,141 @@ test('WhatsApp invoice delivery uploads private bytes then sends a media ID', as
   assert.equal(outbound.document.id, 'media-1');
   assert.equal('link' in outbound.document, false);
 });
+
+test('Razorpay createRefund sends exact body and idempotency header and validates response', async () => {
+  let request;
+  const fetchImpl = async (url, options) => {
+    request = { url, options };
+    return response(200, {
+      id: 'rfnd_TEST123456', entity: 'refund', amount: 50000,
+      currency: 'INR', payment_id: 'pay_ABC123', status: 'processed',
+    });
+  };
+  const client = createRazorpayClient({ fetchImpl, env: razorEnv });
+  const result = await client.createRefund({
+    paymentId: 'pay_ABC123',
+    amount: 50000,
+    idempotencyKey: 'refund_no_driver_found_job1',
+  });
+  assert.equal(request.options.method, 'POST');
+  assert.equal(request.url, 'https://api.razorpay.com/v1/payments/pay_ABC123/refund');
+  assert.equal(request.options.headers['X-Refund-Idempotency'], 'refund_no_driver_found_job1');
+  assert.equal(request.options.headers['Content-Type'], 'application/json');
+  assert.deepEqual(JSON.parse(request.options.body), { amount: 50000 });
+  assert.equal(result.id, 'rfnd_TEST123456');
+  assert.equal(result.status, 'processed');
+});
+
+test('Razorpay createRefund accepts empty currency string, absent currency, and INR', async () => {
+  // Empty currency string:
+  const fetchEmpty = async () => response(200, {
+    id: 'rfnd_PENDING99', entity: 'refund', amount: 10000,
+    currency: '', payment_id: 'pay_ABC123', status: 'pending',
+  });
+  const clientEmpty = createRazorpayClient({ fetchImpl: fetchEmpty, env: razorEnv });
+  const resultEmpty = await clientEmpty.createRefund({
+    paymentId: 'pay_ABC123',
+    amount: 10000,
+    idempotencyKey: 'refund_no_driver_found_job2',
+  });
+  assert.equal(resultEmpty.id, 'rfnd_PENDING99');
+  assert.equal(resultEmpty.status, 'pending');
+
+  // Currency absent:
+  const fetchAbsent = async () => response(200, {
+    id: 'rfnd_ABSENT', entity: 'refund', amount: 10000,
+    payment_id: 'pay_ABC123', status: 'pending',
+  });
+  const clientAbsent = createRazorpayClient({ fetchImpl: fetchAbsent, env: razorEnv });
+  const resultAbsent = await clientAbsent.createRefund({
+    paymentId: 'pay_ABC123',
+    amount: 10000,
+    idempotencyKey: 'refund_no_driver_found_job3',
+  });
+  assert.equal(resultAbsent.id, 'rfnd_ABSENT');
+
+  // Currency INR:
+  const fetchINR = async () => response(200, {
+    id: 'rfnd_INR12345', entity: 'refund', amount: 10000,
+    currency: 'INR', payment_id: 'pay_ABC123', status: 'pending',
+  });
+  const clientINR = createRazorpayClient({ fetchImpl: fetchINR, env: razorEnv });
+  const resultINR = await clientINR.createRefund({
+    paymentId: 'pay_ABC123',
+    amount: 10000,
+    idempotencyKey: 'refund_no_driver_found_job4',
+  });
+  assert.equal(resultINR.id, 'rfnd_INR12345');
+});
+
+test('Razorpay createRefund rejects non-string currency or invalid schema', async () => {
+  // Number currency
+  const nonStringCurrency = createRazorpayClient({
+    fetchImpl: async () => response(200, {
+      id: 'rfnd_BADCURR', entity: 'refund', amount: 10000,
+      currency: 123, payment_id: 'pay_ABC123', status: 'pending',
+    }),
+    env: razorEnv,
+  });
+  await assert.rejects(
+    nonStringCurrency.createRefund({ paymentId: 'pay_ABC123', amount: 10000, idempotencyKey: 'key_1234567890' }),
+    ProviderResponseError
+  );
+
+  // Object currency
+  const objCurrency = createRazorpayClient({
+    fetchImpl: async () => response(200, {
+      id: 'rfnd_OBJCURR', entity: 'refund', amount: 10000,
+      currency: { code: 'INR' }, payment_id: 'pay_ABC123', status: 'pending',
+    }),
+    env: razorEnv,
+  });
+  await assert.rejects(
+    objCurrency.createRefund({ paymentId: 'pay_ABC123', amount: 10000, idempotencyKey: 'key_1234567890' }),
+    ProviderResponseError
+  );
+
+  const wrongAmount = createRazorpayClient({
+    fetchImpl: async () => response(200, {
+      id: 'rfnd_WRONGAMT', entity: 'refund', amount: 9999,
+      currency: 'INR', payment_id: 'pay_ABC123', status: 'pending',
+    }),
+    env: razorEnv,
+  });
+  await assert.rejects(
+    wrongAmount.createRefund({ paymentId: 'pay_ABC123', amount: 10000, idempotencyKey: 'key_1234567890' }),
+    ProviderResponseError
+  );
+});
+
+test('Razorpay getRefund queries exact path and validates matching refund ID', async () => {
+  let request;
+  const fetchImpl = async (url, options) => {
+    request = { url, options };
+    return response(200, {
+      id: 'rfnd_GET123456', entity: 'refund', amount: 20000,
+      currency: 'INR', payment_id: 'pay_ABC123', status: 'processed',
+    });
+  };
+  const client = createRazorpayClient({ fetchImpl, env: razorEnv });
+  const result = await client.getRefund({
+    paymentId: 'pay_ABC123',
+    refundId: 'rfnd_GET123456',
+    amount: 20000,
+  });
+  assert.equal(request.options.method, 'GET');
+  assert.equal(request.url, 'https://api.razorpay.com/v1/payments/pay_ABC123/refunds/rfnd_GET123456');
+  assert.equal(result.id, 'rfnd_GET123456');
+
+  const mismatchedId = createRazorpayClient({
+    fetchImpl: async () => response(200, {
+      id: 'rfnd_OTHER999', entity: 'refund', amount: 20000,
+      currency: 'INR', payment_id: 'pay_ABC123', status: 'processed',
+    }),
+    env: razorEnv,
+  });
+  await assert.rejects(
+    mismatchedId.getRefund({ paymentId: 'pay_ABC123', refundId: 'rfnd_GET123456', amount: 20000 }),
+    ProviderResponseError
+  );
+});

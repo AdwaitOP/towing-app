@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const { verifySignature } = require('../utils/hmac');
 const { createIdempotencyService } = require('../utils/idempotency');
@@ -7,6 +8,23 @@ const { validateRazorpayPayload } = require('../utils/razorpayPayload');
 const { requireEnv } = require('../utils/env');
 const { ensureInvoiceAndSend } = require('../services/invoiceService');
 const { triggerDispatch } = require('../jobs/dispatchBoundary');
+const {
+  validateRefundConfirmedOutbox,
+  REFUND_REQUEST_KEYS,
+  validateRefundRequestRecord,
+  validateRefundRequestLifecycle,
+  validateJobRefundProjection,
+  validateCanonicalRefundOccurrence,
+  validateConfirmedOccurrence,
+  validateConfirmedWinner,
+  isValidRefundId,
+  isAuthoritativeTimestamp,
+  timestampsEqual,
+  timestampsInOrder,
+  safeTimestampsEqual,
+  compareTimestamps,
+} = require('../dispatch/noDriverRefund');
+const { exactKeys, timestampMillis } = require('../dispatch/dispatchValidation');
 
 class WebhookProcessingError extends Error {
   constructor(message, code = 'WEBHOOK_PROCESSING_ERROR') {
@@ -215,51 +233,179 @@ function createRazorpayWebhook({
     if (query.empty) throw new WebhookProcessingError('Refund payment does not match a job', 'JOB_NOT_FOUND');
     if (query.size !== 1) throw new WebhookProcessingError('Refund payment matches multiple jobs', 'PAYMENT_ID_AMBIGUOUS');
     const jobRef = query.docs[0].ref;
+
     await db.runTransaction(async transaction => {
-      const snapshot = await transaction.get(jobRef);
+      const outboxId = 'refund_confirmed:' + jobRef.id;
+      const refundRef = db.collection('refund_requests').doc(jobRef.id);
+      const outboxRef = db.collection('notification_outbox').doc(outboxId);
+      const [snapshot, refundSnap, outboxSnap] = await Promise.all([
+        transaction.get(jobRef),
+        transaction.get(refundRef),
+        transaction.get(outboxRef),
+      ]);
       if (!snapshot.exists) throw new WebhookProcessingError('Refund job disappeared');
       const job = snapshot.data();
-      if (job.razorpayPaymentId !== paymentId || !validTimestamp(job.paymentConfirmedAt)) {
-        throw new WebhookProcessingError('Refund does not match the job payment');
+
+      // Require durable refund request for no-driver refunds
+      if (!refundSnap.exists) {
+        throw new WebhookProcessingError('Durable refund request required for no-driver refund', 'DOCUMENT_NOT_FOUND');
       }
-      if (
-        job.status !== 'cancelled_system' ||
-        job.cancelledBy !== 'system' ||
-        job.cancellationReason !== 'no_driver_found'
-      ) {
-        throw new WebhookProcessingError('Refund is not for a system no-driver cancellation');
+      const refund = refundSnap.data();
+
+      // Bound provider refund ID check
+      if (refund.razorpayRefundId === null || refund.razorpayRefundId === undefined) {
+        throw new WebhookProcessingError('Local refund provider identity not yet recorded; webhook retry required', 'REFUND_IDENTITY_UNBOUND');
       }
-      if (job.bookingFeePaise !== amountPaise) {
-        throw new WebhookProcessingError('Refund amount does not match booking fee');
+      if (!isValidRefundId(refund.razorpayRefundId)) {
+        throw new WebhookProcessingError('Local refund provider identity format invalid', 'REFUND_ID_INVALID');
       }
-      const hasRefundId = markerPresent(job.razorpayRefundId);
-      const hasRefundAmount = markerPresent(job.refundedAmountPaise);
-      const hasRefundConfirmation = markerPresent(job.refundConfirmedAt);
-      if (hasRefundId && (typeof job.razorpayRefundId !== 'string' || !job.razorpayRefundId)) {
-        throw new WebhookProcessingError('Stored refund ID is invalid', 'REFUND_MARKERS_INCONSISTENT');
+      if (refund.razorpayRefundId !== refundId) {
+        throw new WebhookProcessingError('A different refund ID is already stored in refund request', 'REFUND_ID_MISMATCH');
       }
-      if (hasRefundId && job.razorpayRefundId !== refundId) {
-        throw new WebhookProcessingError('A different refund ID is already stored', 'REFUND_ID_MISMATCH');
+
+      const nowMs = typeof now === 'function' ? now() : (now instanceof Date ? now.getTime() : now);
+      const nowTs = TimestampClass.fromMillis(nowMs);
+
+      // Outbox check if exists
+      if (outboxSnap.exists) {
+        const outbox = outboxSnap.data();
+        if (!validateRefundConfirmedOutbox(outbox, { jobId: jobRef.id, amountPaise, TimestampClass })) {
+          throw new WebhookProcessingError('Outbox payload mismatch', 'OUTBOX_COLLISION_INVALID');
+        }
       }
-      if (hasRefundAmount && job.refundedAmountPaise !== amountPaise) {
-        throw new WebhookProcessingError('Stored refund amount is inconsistent', 'REFUND_MARKERS_INCONSISTENT');
-      }
-      if (hasRefundConfirmation && !validTimestamp(job.refundConfirmedAt)) {
-        throw new WebhookProcessingError('Refund confirmation timestamp is invalid', 'REFUND_MARKERS_INCONSISTENT');
-      }
-      if (!hasRefundId && (hasRefundAmount || hasRefundConfirmation)) {
-        throw new WebhookProcessingError('Refund markers are missing their refund ID', 'REFUND_MARKERS_INCONSISTENT');
-      }
-      if (hasRefundId && hasRefundAmount && hasRefundConfirmation) {
+
+      // Absorbing confirmed state validation
+      const isJobConfirmed = job.refundState === 'confirmed';
+      const isRefundConfirmed = refund.state === 'confirmed';
+
+      if (isJobConfirmed || isRefundConfirmed) {
+        if (!isJobConfirmed || !isRefundConfirmed) {
+          throw new WebhookProcessingError('Contradictory confirmed state between job and refund', 'CONFIRMED_IDENTITY_MISMATCH');
+        }
+        const claim = {
+          jobId: jobRef.id,
+          amount: amountPaise,
+          paymentId,
+          refundId,
+        };
+        if (!validateConfirmedOccurrence(job, refund, claim, TimestampClass, nowMs)) {
+          throw new WebhookProcessingError('Confirmed occurrence invalid', 'CONFIRMED_IDENTITY_MISMATCH');
+        }
+        // Confirmed winner requires EXISTING canonical outbox
+        if (!outboxSnap.exists || !validateRefundConfirmedOutbox(outboxSnap.data(), { jobId: jobRef.id, amountPaise, TimestampClass })) {
+          throw new WebhookProcessingError('Confirmed winner missing canonical outbox', 'CONFIRMED_IDENTITY_MISMATCH');
+        }
         return;
       }
-      const timestamp = TimestampClass.fromMillis(now());
+
+      // Predecessor state validation: legal predecessors for webhook confirmation
+      const ALLOWED_PREDECESSORS = ['submitted', 'in_progress', 'failed_terminal'];
+      if (!ALLOWED_PREDECESSORS.includes(refund.state)) {
+        throw new WebhookProcessingError('Refund request state invalid for confirmation: ' + refund.state, 'REFUND_STATE_INVALID');
+      }
+
+      // Validate lifecycle & projection of predecessor
+      if (!validateRefundRequestLifecycle(refund, {
+        jobId: jobRef.id,
+        bookingFeePaise: amountPaise,
+        razorpayPaymentId: paymentId,
+        TimestampClass,
+        nowMs,
+        allowBoundInProgress: true,
+      })) {
+        throw new WebhookProcessingError('Refund request lifecycle invalid', 'REFUND_SCHEMA_INVALID');
+      }
+
+      // Validate job projection against refund predecessor using canonical projection validator
+      if (!validateJobRefundProjection(job, refund, { TimestampClass, nowMs, allowSubmittedJobConfirmedAt: true })) {
+        throw new WebhookProcessingError('Job does not accurately project refund request', 'JOB_REFUND_STATE_CONTRADICTION');
+      }
+
+      // STEP 1: Determine the ACTUAL confirmation timestamp C
+      const hasJobConfirmation = isAuthoritativeTimestamp(job.refundConfirmedAt, TimestampClass);
+      const hasRefundConfirmation = isAuthoritativeTimestamp(refund.confirmedAt, TimestampClass);
+
+      let confirmedTimestamp;
+      if (hasJobConfirmation && hasRefundConfirmation) {
+        if (!timestampsEqual(job.refundConfirmedAt, refund.confirmedAt, TimestampClass)) {
+          throw new WebhookProcessingError('Job and refund confirmedAt timestamps disagree', 'TIMESTAMPS_INVALID');
+        }
+        confirmedTimestamp = job.refundConfirmedAt;
+      } else if (hasJobConfirmation) {
+        confirmedTimestamp = job.refundConfirmedAt;
+      } else if (hasRefundConfirmation) {
+        confirmedTimestamp = refund.confirmedAt;
+      } else {
+        confirmedTimestamp = nowTs;
+      }
+
+      // STEP 2: Validate EVERY prerequisite against confirmedTimestamp (C)
+      if (compareTimestamps(confirmedTimestamp, nowTs, TimestampClass) > 0) {
+        throw new WebhookProcessingError('Confirmed timestamp is in the future', 'CHRONOLOGY_VIOLATION');
+      }
+      if (compareTimestamps(job.paymentConfirmedAt, confirmedTimestamp, TimestampClass) > 0) {
+        throw new WebhookProcessingError('Payment confirmed after confirmation timestamp', 'CHRONOLOGY_VIOLATION');
+      }
+      if (compareTimestamps(refund.createdAt, confirmedTimestamp, TimestampClass) > 0) {
+        throw new WebhookProcessingError('Refund created after confirmation timestamp', 'CHRONOLOGY_VIOLATION');
+      }
+      if (refund.submittedAt !== null && compareTimestamps(refund.submittedAt, confirmedTimestamp, TimestampClass) > 0) {
+        throw new WebhookProcessingError('Refund submitted after confirmation timestamp', 'CHRONOLOGY_VIOLATION');
+      }
+
+      // STEP 3: Atomic Confirmation Writes
+      if (!outboxSnap.exists) {
+        transaction.set(outboxRef, {
+          eventId: outboxId,
+          eventType: 'refund_confirmed',
+          resourceType: 'refund_request',
+          resourceId: jobRef.id,
+          channel: 'whatsapp',
+          recipientKey: 'customer:' + jobRef.id,
+          payloadVersion: 1,
+          payload: {
+            jobId: jobRef.id,
+            jobStatus: 'cancelled_system',
+            refundAmountPaise: amountPaise,
+          },
+          state: 'pending',
+          ownerToken: null,
+          leaseUntil: null,
+          nextAttemptAt: confirmedTimestamp,
+          attemptCount: 0,
+          providerMessageId: null,
+          lastErrorCode: null,
+          createdAt: confirmedTimestamp,
+          updatedAt: confirmedTimestamp,
+          sentAt: null,
+        });
+      }
+
       transaction.update(jobRef, {
+        refundState: 'confirmed',
         razorpayRefundId: refundId,
         refundedAmountPaise: amountPaise,
-        refundConfirmedAt: hasRefundConfirmation ? job.refundConfirmedAt : timestamp,
-        updatedAt: timestamp,
+        refundConfirmedAt: confirmedTimestamp,
+        refundNextAttemptAt: null,
+        updatedAt: nowTs,
       });
+
+      const refundUpdate = {
+        state: 'confirmed',
+        razorpayRefundId: refundId,
+        confirmationSource: 'webhook',
+        confirmedAt: confirmedTimestamp,
+        ownerToken: null,
+        leaseUntil: null,
+        nextAttemptAt: null,
+        reconciliationNextAttemptAt: null,
+        lastErrorCode: null,
+        updatedAt: nowTs,
+      };
+      if (refund.state === 'submitted' || refund.submittedAt !== null) {
+        refundUpdate.submittedAt = refund.submittedAt;
+      }
+      transaction.update(refundRef, refundUpdate);
     });
     return { refundId };
   }

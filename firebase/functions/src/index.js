@@ -115,6 +115,29 @@ exports.reconcileCustomerCancellations = onSchedule({
 const { cancelJob } = require('./dispatch/cancelJob');
 exports.cancelJob = cancelJob;
 
+// ── Phase 4 Stage 9 no-driver Razorpay refund ────────────────────────────────
+const {
+  productionNoDriverRefundManager,
+  shouldProcessRefundIntent,
+} = require('./dispatch/noDriverRefund');
+
+exports.processRefundIntent = onDocumentWritten({
+  document: 'refund_requests/{jobId}', retry: true,
+  secrets: ['RAZORPAY_KEY_SECRET'],
+}, async event => {
+  if (!shouldProcessRefundIntent(event)) return;
+  const result = await productionNoDriverRefundManager().processRefundIntent(event.params.jobId);
+  if (result) logger.info('Refund intent initiation result', result);
+});
+
+exports.reconcileRefunds = onSchedule({
+  schedule: process.env.REFUND_RECONCILE_SCHEDULE || process.env.DISPATCH_RECONCILE_SCHEDULE || '',
+  timeZone: 'Asia/Kolkata',
+  secrets: ['RAZORPAY_KEY_SECRET'],
+}, async () => {
+  logger.info('Refund sweep result', await productionNoDriverRefundManager().reconcileRefunds());
+});
+
 
 // ── Phase 6 (placeholder) ────────────────────────────────────────────────────
 // const { adminApproveDriver } = require('./admin/approveDriver');
