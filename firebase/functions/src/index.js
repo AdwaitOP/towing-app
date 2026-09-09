@@ -138,6 +138,32 @@ exports.reconcileRefunds = onSchedule({
   logger.info('Refund sweep result', await productionNoDriverRefundManager().reconcileRefunds());
 });
 
+// ── Phase 4 Stage 10 notification outbox delivery & recovery ───────────────────
+const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const {
+  productionNotificationManager,
+  shouldProcessNotificationCreated,
+} = require('./dispatch/notificationDelivery');
+
+exports.deliverNotification = onDocumentCreated({
+  document: 'notification_outbox/{eventId}', retry: true,
+  secrets: ['WHATSAPP_ACCESS_TOKEN'],
+}, async event => {
+  if (!shouldProcessNotificationCreated(event)) return;
+  const result = await productionNotificationManager().deliverNotification(event.params.eventId);
+  if (result) logger.info('Notification delivery result', {
+    eventId: event.params.eventId, status: result.status || null, finalized: result.finalized === true,
+  });
+});
+
+exports.reconcileNotifications = onSchedule({
+  schedule: process.env.NOTIFICATION_RECONCILE_SCHEDULE || process.env.DISPATCH_RECONCILE_SCHEDULE || '',
+  timeZone: 'Asia/Kolkata',
+  secrets: ['WHATSAPP_ACCESS_TOKEN'],
+}, async () => {
+  logger.info('Notification sweep result', await productionNotificationManager().deliverPendingNotifications());
+});
+
 
 // ── Phase 6 (placeholder) ────────────────────────────────────────────────────
 // const { adminApproveDriver } = require('./admin/approveDriver');
