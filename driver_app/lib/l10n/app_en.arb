@@ -1,0 +1,197 @@
+{
+  "@@locale": "en",
+  "appName": "Towing Driver",
+  "@appName": {
+    "description": "The title of the driver application"
+  },
+  "phoneNumber": "Phone Number",
+  "@phoneNumber": {
+    "description": "Label for phone number input"
+  },
+  "phoneNumberHint": "98765 43210",
+  "@phoneNumberHint": {
+    "description": "Hint text for phone number input"
+  },
+  "sendOtp": "Send OTP",
+  "@sendOtp": {
+    "description": "Button to send OTP"
+  },
+  "enterOtp": "Enter 6-Digit OTP",
+  "@enterOtp": {
+    "description": "Header for OTP entry"
+  },
+  "otpSentTo": "OTP sent via WhatsApp to {phone}",
+  "@otpSentTo": {
+    "description": "Subheading indicating where OTP was sent",
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
+  "verifyOtp": "Verify OTP",
+  "@verifyOtp": {
+    "description": "Button to verify OTP"
+  },
+  "resendOtp": "Resend OTP",
+  "@resendOtp": {
+    "description": "Button to resend OTP"
+  },
+  "resendOtpCooldown": "Resend in {seconds}s",
+  "@resendOtpCooldown": {
+    "description": "Cooldown timer for resending OTP",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "invalidPhone": "Please enter a valid 10-digit mobile number",
+  "@invalidPhone": {
+    "description": "Error message for invalid phone"
+  },
+  "invalidOtp": "Please enter a valid 6-digit OTP",
+  "@invalidOtp": {
+    "description": "Error message for invalid OTP"
+  },
+  "otpSent": "OTP has been sent to your WhatsApp",
+  "@otpSent": {
+    "description": "Confirmation message when OTP is sent"
+  },
+  "otpExpired": "OTP has expired. Please request a new one.",
+  "@otpExpired": {
+    "description": "Error message when OTP expired"
+  },
+  "otpAttemptsExceeded": "Maximum attempts exceeded. Please request a new OTP.",
+  "@otpAttemptsExceeded": {
+    "description": "Error message when verification attempts exceeded"
+  },
+  "otpSendBlocked": "Too many OTP requests. Please try again later.",
+  "@otpSendBlocked": {
+    "description": "Error message when OTP sending is temporarily blocked"
+  },
+  "otpResendCooldown": "Please wait before requesting another OTP.",
+  "@otpResendCooldown": {
+    "description": "Error message when requesting OTP too quickly"
+  },
+  "otpDeliveryFailed": "Failed to deliver OTP via WhatsApp. Please try again.",
+  "@otpDeliveryFailed": {
+    "description": "Error message when WhatsApp delivery fails"
+  },
+  "profileSetup": "Driver Profile Setup",
+  "@profileSetup": {
+    "description": "Header for profile creation screen"
+  },
+  "profileSetupSubtitle": "Complete your profile to get started with towing dispatch.",
+  "@profileSetupSubtitle": {
+    "description": "Subtitle for profile creation screen"
+  },
+  "driverName": "Full Name",
+  "@driverName": {
+    "description": "Label for driver full name"
+  },
+  "driverNameHint": "Enter your full name",
+  "@driverNameHint": {
+    "description": "Hint for driver full name"
+  },
+  "driverNameRequired": "Full name is required",
+  "@driverNameRequired": {
+    "description": "Validation error for empty driver name"
+  },
+  "truckType": "Tow Truck Type",
+  "@truckType": {
+    "description": "Label for truck type selector"
+  },
+  "truckTypeFlatbed": "Flatbed Tow Truck",
+  "@truckTypeFlatbed": {
+    "description": "Flatbed truck label"
+  },
+  "truckTypeTochan": "Tochan (Under-lift)",
+  "@truckTypeTochan": {
+    "description": "Tochan truck label"
+  },
+  "truckTypeHydraulic": "Hydraulic Lift",
+  "@truckTypeHydraulic": {
+    "description": "Hydraulic truck label"
+  },
+  "truckTypeCrane": "Crane Recovery",
+  "@truckTypeCrane": {
+    "description": "Crane recovery truck label"
+  },
+  "vehicleNumber": "Vehicle Registration Number",
+  "@vehicleNumber": {
+    "description": "Label for vehicle registration number"
+  },
+  "vehicleNumberHint": "MH 46 AB 1234",
+  "@vehicleNumberHint": {
+    "description": "Hint for vehicle registration number"
+  },
+  "vehicleNumberRequired": "Vehicle number is required",
+  "@vehicleNumberRequired": {
+    "description": "Validation error for empty vehicle number"
+  },
+  "continueButton": "Continue",
+  "@continueButton": {
+    "description": "Text for continue/submit button"
+  },
+  "saving": "Saving...",
+  "@saving": {
+    "description": "Loading label when saving profile"
+  },
+  "logout": "Logout",
+  "@logout": {
+    "description": "Button to sign out"
+  },
+  "loading": "Loading...",
+  "@loading": {
+    "description": "Generic loading message"
+  },
+  "retry": "Retry",
+  "@retry": {
+    "description": "Button to retry action"
+  },
+  "genericNetworkError": "Network connection error. Please check your internet connection.",
+  "@genericNetworkError": {
+    "description": "Generic network error message"
+  },
+  "authFailed": "Authentication failed. Please try again.",
+  "@authFailed": {
+    "description": "Generic authentication failure message"
+  },
+  "driverSetupComplete": "Driver app setup complete",
+  "@driverSetupComplete": {
+    "description": "Header indicating Stage 1 setup is complete"
+  },
+  "stage1Subtitle": "Your profile has been saved. Next stage: KYC & Verification.",
+  "@stage1Subtitle": {
+    "description": "Subtitle on Stage 1 placeholder screen"
+  },
+  "changePhoneNumber": "Change phone number",
+  "@changePhoneNumber": {
+    "description": "Button to go back and change phone number"
+  },
+  "statusOffDuty": "Off Duty",
+  "@statusOffDuty": {
+    "description": "Duty status off"
+  },
+  "dutyStatus": "Duty Status",
+  "@dutyStatus": {
+    "description": "Label for duty status field"
+  },
+  "selectLanguage": "Language",
+  "@selectLanguage": {
+    "description": "Label for language selector"
+  },
+  "profileLoadError": "Failed to load driver profile. Please try again.",
+  "@profileLoadError": {
+    "description": "Error message when loading profile from Firestore fails"
+  },
+  "profileSaveError": "Failed to save driver profile. Please try again.",
+  "@profileSaveError": {
+    "description": "Error message when creating/saving profile fails"
+  },
+  "profileMalformedError": "Driver profile data is invalid. Please contact support.",
+  "@profileMalformedError": {
+    "description": "Error message when driver profile is corrupted or malformed"
+  }
+}
