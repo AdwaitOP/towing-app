@@ -48,7 +48,17 @@ service firebase.storage {
     }
 
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.admin == true;
+      return isAuthenticated()
+          && 'admin' in request.auth.token
+          && request.auth.token.admin == true;
+    }
+
+    function driverVerificationAllowsUpload(driverId) {
+      let driverPath = /databases/(default)/documents/drivers/$(driverId);
+      return firestore.exists(driverPath)
+          && (!('verificationStatus' in firestore.get(driverPath).data)
+              || firestore.get(driverPath).data.verificationStatus == null
+              || firestore.get(driverPath).data.verificationStatus == 'rejected');
     }
 
     // ── Driver verification photos ──────────────────────────────────────────
@@ -67,11 +77,13 @@ service firebase.storage {
       // • Filename must be one of the three expected KYC files
       // • File must be an image (MIME type check — defense-in-depth over app enforcement)
       // • File must be ≤ 10 MB (conservative MVP limit — not a spec-defined value)
+      // • Driver must be unsubmitted (verificationStatus absent/null) or rejected
       allow create, update: if isAuthenticated()
                             && request.auth.uid == driverId
                             && filename in ['id.jpg', 'rc.jpg', 'selfie.jpg']
                             && request.resource.size <= 10 * 1024 * 1024
-                            && request.resource.contentType.matches('image/.*');
+                            && request.resource.contentType.matches('image/.*')
+                            && driverVerificationAllowsUpload(driverId);
 
       // DELETE: denied to drivers. KYC files are lifecycle-managed by the
       // Cloud Function (Admin SDK) — specifically the DPDP retention cleanup

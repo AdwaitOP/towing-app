@@ -263,7 +263,12 @@ void main() {
         'activeJobId': 'job_789',
         'activeOfferId': null,
         'verificationStatus': 'approved',
-        'verificationDocs': {'license': 'https://storage/license.jpg'},
+        'verificationDocs': {
+          'idPhotoUrl': 'https://storage/id.jpg',
+          'rcPhotoUrl': 'https://storage/rc.jpg',
+          'selfiePhotoUrl': 'https://storage/selfie.jpg',
+          'submittedAt': DateTime.now(),
+        },
         'rejectionReason': null,
         'bannedUntil': null,
         'strictMode': false,
@@ -279,6 +284,155 @@ void main() {
       expect(profile.vehicleNumber, equals('MH 46 AB 1234'));
       expect(profile.isOnDuty, isTrue);
       expect(profile.isCompleted, isTrue);
+      expect(profile.verificationStatus, equals('approved'));
+      expect(profile.isApproved, isTrue);
+    });
+
+    group('Verification Status & Docs Contract Hardening', () {
+      final baseMap = {
+        'uid': 'driver_123',
+        'name': 'Rajesh Sharma',
+        'phone': '+919876543210',
+        'truckType': 'hydraulic',
+        'vehicleNumber': 'MH 46 AB 1234',
+        'isOnDuty': false,
+      };
+
+      test('constructor defaults verificationStatus to null (unsubmitted)', () {
+        const profile = DriverProfile(
+          uid: 'driver_123',
+          name: 'Rajesh Sharma',
+          phone: '+919876543210',
+          truckType: TruckType.hydraulic,
+          vehicleNumber: 'MH 46 AB 1234',
+        );
+        expect(profile.verificationStatus, isNull);
+        expect(profile.isApproved, isFalse);
+        expect(profile.isPendingVerification, isFalse);
+        expect(profile.isRejectedVerification, isFalse);
+      });
+
+      test('absent or null verificationStatus parses as unsubmitted (null)', () {
+        final profileAbsent = DriverProfile.fromMap(baseMap, 'driver_123');
+        expect(profileAbsent.verificationStatus, isNull);
+        expect(profileAbsent.isApproved, isFalse);
+
+        final mapNull = Map<String, dynamic>.from(baseMap)..['verificationStatus'] = null;
+        final profileNull = DriverProfile.fromMap(mapNull, 'driver_123');
+        expect(profileNull.verificationStatus, isNull);
+        expect(profileNull.isApproved, isFalse);
+      });
+
+      test('canonical verificationStatus values parse accurately', () {
+        final mapPending = Map<String, dynamic>.from(baseMap)..['verificationStatus'] = 'pending';
+        final profilePending = DriverProfile.fromMap(mapPending, 'driver_123');
+        expect(profilePending.verificationStatus, equals('pending'));
+        expect(profilePending.isPendingVerification, isTrue);
+        expect(profilePending.isApproved, isFalse);
+
+        final mapApproved = Map<String, dynamic>.from(baseMap)..['verificationStatus'] = 'approved';
+        final profileApproved = DriverProfile.fromMap(mapApproved, 'driver_123');
+        expect(profileApproved.verificationStatus, equals('approved'));
+        expect(profileApproved.isApproved, isTrue);
+
+        final mapRejected = Map<String, dynamic>.from(baseMap)
+          ..['verificationStatus'] = 'rejected'
+          ..['rejectionReason'] = 'ID expired';
+        final profileRejected = DriverProfile.fromMap(mapRejected, 'driver_123');
+        expect(profileRejected.verificationStatus, equals('rejected'));
+        expect(profileRejected.isRejectedVerification, isTrue);
+        expect(profileRejected.rejectionReason, equals('ID expired'));
+        expect(profileRejected.isApproved, isFalse);
+      });
+
+      test('legacy "verified" is rejected with FormatException', () {
+        final mapVerified = Map<String, dynamic>.from(baseMap)..['verificationStatus'] = 'verified';
+        expect(() => DriverProfile.fromMap(mapVerified, 'driver_123'), throwsFormatException);
+      });
+
+      test('empty, whitespace, or invalid strings in verificationStatus are rejected', () {
+        for (final invalid in ['', '   ', 'APPROVED', ' Approved', 'pending ', 'in_review', 'submitted']) {
+          final map = Map<String, dynamic>.from(baseMap)..['verificationStatus'] = invalid;
+          expect(() => DriverProfile.fromMap(map, 'driver_123'), throwsFormatException, reason: 'Failed for $invalid');
+        }
+      });
+
+      test('non-string verificationStatus types are rejected with FormatException', () {
+        for (final invalid in [123, true, false, 1.5, ['approved'], {'status': 'approved'}]) {
+          final map = Map<String, dynamic>.from(baseMap)..['verificationStatus'] = invalid;
+          expect(() => DriverProfile.fromMap(map, 'driver_123'), throwsFormatException);
+        }
+      });
+
+      test('valid verificationDocs parses cleanly', () {
+        final now = DateTime.now();
+        final mapWithDocs = Map<String, dynamic>.from(baseMap)
+          ..['verificationStatus'] = 'pending'
+          ..['verificationDocs'] = {
+            'idPhotoUrl': 'https://firebasestorage.../id.jpg',
+            'rcPhotoUrl': 'https://firebasestorage.../rc.jpg',
+            'selfiePhotoUrl': 'https://firebasestorage.../selfie.jpg',
+            'submittedAt': now,
+          };
+        final profile = DriverProfile.fromMap(mapWithDocs, 'driver_123');
+        expect(profile.verificationDocs, isNotNull);
+        expect(profile.verificationDocs!['idPhotoUrl'], equals('https://firebasestorage.../id.jpg'));
+        expect(profile.verificationDocs!['submittedAt'], equals(now));
+      });
+
+      test('malformed verificationDocs fails closed with FormatException', () {
+        // Non-map
+        final nonMap = Map<String, dynamic>.from(baseMap)..['verificationDocs'] = 'not_a_map';
+        expect(() => DriverProfile.fromMap(nonMap, 'driver_123'), throwsFormatException);
+
+        // Missing idPhotoUrl
+        final missingId = Map<String, dynamic>.from(baseMap)
+          ..['verificationDocs'] = {
+            'rcPhotoUrl': 'https://rc.jpg',
+            'selfiePhotoUrl': 'https://selfie.jpg',
+            'submittedAt': DateTime.now(),
+          };
+        expect(() => DriverProfile.fromMap(missingId, 'driver_123'), throwsFormatException);
+
+        // Empty idPhotoUrl
+        final emptyId = Map<String, dynamic>.from(baseMap)
+          ..['verificationDocs'] = {
+            'idPhotoUrl': '   ',
+            'rcPhotoUrl': 'https://rc.jpg',
+            'selfiePhotoUrl': 'https://selfie.jpg',
+            'submittedAt': DateTime.now(),
+          };
+        expect(() => DriverProfile.fromMap(emptyId, 'driver_123'), throwsFormatException);
+
+        // Non-string idPhotoUrl
+        final intId = Map<String, dynamic>.from(baseMap)
+          ..['verificationDocs'] = {
+            'idPhotoUrl': 12345,
+            'rcPhotoUrl': 'https://rc.jpg',
+            'selfiePhotoUrl': 'https://selfie.jpg',
+            'submittedAt': DateTime.now(),
+          };
+        expect(() => DriverProfile.fromMap(intId, 'driver_123'), throwsFormatException);
+
+        // Missing submittedAt
+        final missingSubmittedAt = Map<String, dynamic>.from(baseMap)
+          ..['verificationDocs'] = {
+            'idPhotoUrl': 'https://id.jpg',
+            'rcPhotoUrl': 'https://rc.jpg',
+            'selfiePhotoUrl': 'https://selfie.jpg',
+          };
+        expect(() => DriverProfile.fromMap(missingSubmittedAt, 'driver_123'), throwsFormatException);
+
+        // Non-Timestamp submittedAt
+        final invalidSubmittedAt = Map<String, dynamic>.from(baseMap)
+          ..['verificationDocs'] = {
+            'idPhotoUrl': 'https://id.jpg',
+            'rcPhotoUrl': 'https://rc.jpg',
+            'selfiePhotoUrl': 'https://selfie.jpg',
+            'submittedAt': '2026-09-11',
+          };
+        expect(() => DriverProfile.fromMap(invalidSubmittedAt, 'driver_123'), throwsFormatException);
+      });
     });
   });
 }

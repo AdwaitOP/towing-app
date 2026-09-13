@@ -23,6 +23,7 @@ void main() {
       truckType: TruckType.crane,
       vehicleNumber: 'MH 46 AB 9999',
       isOnDuty: false,
+      verificationStatus: 'approved',
     );
 
     testWidgets('renders profile summary and Stage 1 setup completion banner', (tester) async {

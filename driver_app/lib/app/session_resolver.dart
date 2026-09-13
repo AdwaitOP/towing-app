@@ -5,6 +5,8 @@ import '../core/services/profile_service.dart';
 import '../features/auth/controllers/auth_controller.dart';
 import '../features/auth/screens/phone_login_screen.dart';
 import '../features/home/screens/stage1_home_screen.dart';
+import '../features/kyc/flow/kyc_flow.dart';
+import '../features/kyc/screens/kyc_pending_screen.dart';
 import '../features/profile/controllers/profile_controller.dart';
 import '../features/profile/screens/profile_setup_screen.dart';
 import '../theme/app_colors.dart';
@@ -127,11 +129,33 @@ class _SessionResolverState extends State<SessionResolver> {
 
             switch (state) {
               case ProfileCompleted(:final profile):
-                return Stage1HomeScreen(
-                  profile: profile,
-                  authService: widget.authService,
-                  onLocaleChanged: widget.onLocaleChanged,
-                );
+                if (profile.isPendingVerification) {
+                  return KycPendingScreen(
+                    profile: profile,
+                    authService: widget.authService,
+                  );
+                } else if (profile.isRejectedVerification) {
+                  return KycFlow(
+                    key: ValueKey('kyc_flow_${user.uid}_rejected'),
+                    profile: profile,
+                    authService: widget.authService,
+                    initialStep: KycFlowInitialStep.rejected,
+                  );
+                } else if (profile.isApproved) {
+                  return Stage1HomeScreen(
+                    profile: profile,
+                    authService: widget.authService,
+                    onLocaleChanged: widget.onLocaleChanged,
+                  );
+                } else {
+                  // Unsubmitted verification (verificationStatus is null or empty)
+                  return KycFlow(
+                    key: ValueKey('kyc_flow_${user.uid}_unsubmitted'),
+                    profile: profile,
+                    authService: widget.authService,
+                    initialStep: KycFlowInitialStep.consent,
+                  );
+                }
 
               case ProfileNotFound():
                 final phone = user.phoneNumber ?? _authController.phone;

@@ -15,12 +15,16 @@ class AppConfig {
   static const int authEmulatorPort = 9099;
   static const int firestoreEmulatorPort = 8080;
   static const int functionsEmulatorPort = 5001;
+  static const int storageEmulatorPort = 9199;
 
   /// Project ID used in emulator mode.
   static const String emulatorProjectId = String.fromEnvironment(
     'FIREBASE_PROJECT_ID',
     defaultValue: 'towing-app',
   );
+
+  /// Storage bucket used in emulator mode.
+  static String get emulatorStorageBucket => '$emulatorProjectId.appspot.com';
 
   /// Resolves the base URL for backend Cloud Functions with strict environment precedence.
   ///

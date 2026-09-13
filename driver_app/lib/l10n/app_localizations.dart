@@ -375,6 +375,288 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Driver profile data is invalid. Please contact support.'**
   String get profileMalformedError;
+
+  /// Title for the KYC driver verification screens
+  ///
+  /// In en, this message translates to:
+  /// **'Driver Verification'**
+  String get kycVerificationTitle;
+
+  /// Subtitle on KYC consent screen
+  ///
+  /// In en, this message translates to:
+  /// **'Complete document verification before accepting towing jobs.'**
+  String get kycConsentSubtitle;
+
+  /// Privacy and purpose notice on KYC consent screen
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy and consent notice: Your documents and selfie are collected strictly for driver verification, towing safety, and fraud prevention. All submissions are reviewed by authorized personnel.'**
+  String get kycConsentNotice;
+
+  /// Title for ID card upload card
+  ///
+  /// In en, this message translates to:
+  /// **'Driver Photo ID'**
+  String get kycDocIdTitle;
+
+  /// Description for ID card upload card
+  ///
+  /// In en, this message translates to:
+  /// **'Clear photo of your Aadhaar Card or Driving License (Rear Camera)'**
+  String get kycDocIdDesc;
+
+  /// Title for vehicle RC upload card
+  ///
+  /// In en, this message translates to:
+  /// **'Vehicle RC Document'**
+  String get kycDocRcTitle;
+
+  /// Description for vehicle RC upload card
+  ///
+  /// In en, this message translates to:
+  /// **'Clear photo of your vehicle registration certificate (Rear Camera)'**
+  String get kycDocRcDesc;
+
+  /// Title for driver selfie upload card
+  ///
+  /// In en, this message translates to:
+  /// **'Driver Selfie'**
+  String get kycDocSelfieTitle;
+
+  /// Description for driver selfie upload card
+  ///
+  /// In en, this message translates to:
+  /// **'Front camera photo of your face in good lighting'**
+  String get kycDocSelfieDesc;
+
+  /// Consent declaration checkbox label
+  ///
+  /// In en, this message translates to:
+  /// **'I consent to the collection and processing of my ID, vehicle RC, and selfie for driver verification.'**
+  String get kycConsentCheckbox;
+
+  /// Button to accept consent and start capture
+  ///
+  /// In en, this message translates to:
+  /// **'Agree & Continue'**
+  String get kycAgreeAndContinue;
+
+  /// Error message when camera permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Camera permission is required to capture verification documents.'**
+  String get cameraPermissionRequired;
+
+  /// Error message when camera hardware is unavailable
+  ///
+  /// In en, this message translates to:
+  /// **'Camera is unavailable on this device.'**
+  String get cameraUnavailable;
+
+  /// Camera overlay instruction for ID card
+  ///
+  /// In en, this message translates to:
+  /// **'Fit your Driving License or Photo ID inside the frame.'**
+  String get cameraCaptureInstructionId;
+
+  /// Camera overlay instruction for RC document
+  ///
+  /// In en, this message translates to:
+  /// **'Fit your Vehicle RC inside the frame.'**
+  String get cameraCaptureInstructionRc;
+
+  /// Camera overlay instruction for selfie
+  ///
+  /// In en, this message translates to:
+  /// **'Position your face inside the oval.'**
+  String get cameraCaptureInstructionSelfie;
+
+  /// Button to retake a photo
+  ///
+  /// In en, this message translates to:
+  /// **'Retake'**
+  String get retake;
+
+  /// Button to accept captured photo
+  ///
+  /// In en, this message translates to:
+  /// **'Use Photo'**
+  String get usePhoto;
+
+  /// Button to capture camera snapshot
+  ///
+  /// In en, this message translates to:
+  /// **'Capture'**
+  String get capturePhoto;
+
+  /// Title for KYC review screen
+  ///
+  /// In en, this message translates to:
+  /// **'Review Documents'**
+  String get kycReviewTitle;
+
+  /// Subtitle for KYC review screen
+  ///
+  /// In en, this message translates to:
+  /// **'Ensure all details are sharp, readable, and not blurred.'**
+  String get kycReviewSubtitle;
+
+  /// Button to submit KYC documents
+  ///
+  /// In en, this message translates to:
+  /// **'Submit for Verification'**
+  String get submitVerification;
+
+  /// Progress label during KYC upload and submission
+  ///
+  /// In en, this message translates to:
+  /// **'Submitting verification...'**
+  String get submittingVerification;
+
+  /// Title on KYC pending screen
+  ///
+  /// In en, this message translates to:
+  /// **'Verification Under Review'**
+  String get kycPendingTitle;
+
+  /// Subtitle on KYC pending screen
+  ///
+  /// In en, this message translates to:
+  /// **'Your documents have been submitted and are under review by our team. You will be notified once verified.'**
+  String get kycPendingSubtitle;
+
+  /// Notice text on KYC pending screen
+  ///
+  /// In en, this message translates to:
+  /// **'Document review typically takes a few hours. Tow dispatch features will activate once approved.'**
+  String get kycPendingNotice;
+
+  /// Title on KYC rejected screen
+  ///
+  /// In en, this message translates to:
+  /// **'Verification Rejected'**
+  String get kycRejectedTitle;
+
+  /// Subtitle on KYC rejected screen
+  ///
+  /// In en, this message translates to:
+  /// **'Your verification was not approved. Please review the reason below and submit fresh documents.'**
+  String get kycRejectedSubtitle;
+
+  /// Label for rejection reason box
+  ///
+  /// In en, this message translates to:
+  /// **'Reason for Rejection'**
+  String get kycRejectionReasonLabel;
+
+  /// Button to start re-verification flow
+  ///
+  /// In en, this message translates to:
+  /// **'Resubmit Documents'**
+  String get kycResubmit;
+
+  /// Fallback rejection reason if none provided by admin
+  ///
+  /// In en, this message translates to:
+  /// **'Documents were unclear or did not match registration details.'**
+  String get kycDefaultRejectionReason;
+
+  /// Error message when storage upload fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to upload document. Please check your network and try again.'**
+  String get kycUploadError;
+
+  /// Error message when callable submission fails
+  ///
+  /// In en, this message translates to:
+  /// **'Verification submission failed. Please try again.'**
+  String get kycSubmissionError;
+
+  /// Label for driver name in details table
+  ///
+  /// In en, this message translates to:
+  /// **'Driver'**
+  String get driverLabel;
+
+  /// Label for vehicle number in details table
+  ///
+  /// In en, this message translates to:
+  /// **'Vehicle'**
+  String get vehicleLabel;
+
+  /// Label for phone number in details table
+  ///
+  /// In en, this message translates to:
+  /// **'Phone'**
+  String get phoneLabel;
+
+  /// Label for status in details table
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get statusLabel;
+
+  /// Status text indicating documents are under review
+  ///
+  /// In en, this message translates to:
+  /// **'Under Review'**
+  String get underReview;
+
+  /// Status label indicating photo has been captured
+  ///
+  /// In en, this message translates to:
+  /// **'Captured'**
+  String get captured;
+
+  /// Status label indicating photo is missing
+  ///
+  /// In en, this message translates to:
+  /// **'Missing'**
+  String get missing;
+
+  /// Error message when required camera lens direction is missing
+  ///
+  /// In en, this message translates to:
+  /// **'Required camera lens is not available on this device.'**
+  String get cameraLensUnavailable;
+
+  /// Error message when camera permission is permanently denied
+  ///
+  /// In en, this message translates to:
+  /// **'Camera permission is permanently denied. Please enable it in Settings.'**
+  String get cameraPermissionPermanentlyDenied;
+
+  /// Error message when taking photo fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to capture photo. Please try again.'**
+  String get photoCaptureFailed;
+
+  /// Generic KYC error message
+  ///
+  /// In en, this message translates to:
+  /// **'An error occurred during verification. Please try again.'**
+  String get kycGenericError;
+
+  /// Error message when user session expires during KYC
+  ///
+  /// In en, this message translates to:
+  /// **'Session expired. Please log in again.'**
+  String get kycSessionExpired;
+
+  /// Error message when documents are missing upon submission
+  ///
+  /// In en, this message translates to:
+  /// **'All required documents must be captured before submission.'**
+  String get kycDocumentsMissing;
+
+  /// Error message when network error occurs during KYC
+  ///
+  /// In en, this message translates to:
+  /// **'Network error. Please check your connection and try again.'**
+  String get kycNetworkError;
 }
 
 class _AppLocalizationsDelegate

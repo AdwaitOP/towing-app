@@ -18,6 +18,9 @@ void main() {
       expect(l10n.driverSetupComplete, equals('Driver app setup complete'));
       expect(l10n.statusOffDuty, equals('Off Duty'));
       expect(l10n.dutyStatus, equals('Duty Status'));
+      expect(l10n.kycVerificationTitle, equals('Driver Verification'));
+      expect(l10n.kycPendingTitle, equals('Verification Under Review'));
+      expect(l10n.kycRejectedTitle, equals('Verification Rejected'));
     });
 
     test('Hindi translations load and match expected strings', () async {
@@ -32,6 +35,9 @@ void main() {
       expect(l10n.driverSetupComplete, equals('ड्राइवर ऐप सेटअप पूरा हुआ'));
       expect(l10n.statusOffDuty, equals('ड्यूटी बंद'));
       expect(l10n.dutyStatus, equals('ड्यूटी स्थिति'));
+      expect(l10n.kycVerificationTitle, equals('चालक सत्यापन'));
+      expect(l10n.kycPendingTitle, equals('सत्यापन समीक्षाधीन है'));
+      expect(l10n.kycRejectedTitle, equals('सत्यापन अस्वीकृत'));
     });
 
     test('Marathi translations load and match expected strings', () async {
@@ -46,6 +52,9 @@ void main() {
       expect(l10n.driverSetupComplete, equals('ड्रायव्हर ॲप सेटअप पूर्ण झाले'));
       expect(l10n.statusOffDuty, equals('ड्युटी बंद'));
       expect(l10n.dutyStatus, equals('ड्युटी स्थिती'));
+      expect(l10n.kycVerificationTitle, equals('चालक पडताळणी'));
+      expect(l10n.kycPendingTitle, equals('पडताळणी प्रलंबित आहे'));
+      expect(l10n.kycRejectedTitle, equals('पडताळणी नाकारली'));
     });
 
     test('exact key set equality across EN, HI, and MR ARB files', () {
@@ -59,7 +68,7 @@ void main() {
       final hiKeys = extractKeys('lib/l10n/app_hi.arb');
       final mrKeys = extractKeys('lib/l10n/app_mr.arb');
 
-      expect(enKeys.length, equals(46));
+      expect(enKeys.length, equals(93));
       expect(hiKeys, equals(enKeys));
       expect(mrKeys, equals(enKeys));
     });

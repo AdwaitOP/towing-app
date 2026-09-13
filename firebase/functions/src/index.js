@@ -164,6 +164,10 @@ exports.reconcileNotifications = onSchedule({
   logger.info('Notification sweep result', await productionNotificationManager().deliverPendingNotifications());
 });
 
+// ── Phase 5 Stage 2 KYC driver verification ──────────────────────────────────
+const { submitDriverVerification } = require('./dispatch/submitDriverVerification');
+exports.submitDriverVerification = submitDriverVerification;
+
 
 // ── Phase 6 (placeholder) ────────────────────────────────────────────────────
 // const { adminApproveDriver } = require('./admin/approveDriver');

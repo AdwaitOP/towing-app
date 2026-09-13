@@ -193,5 +193,193 @@
   "profileMalformedError": "Driver profile data is invalid. Please contact support.",
   "@profileMalformedError": {
     "description": "Error message when driver profile is corrupted or malformed"
+  },
+  "kycVerificationTitle": "Driver Verification",
+  "@kycVerificationTitle": {
+    "description": "Title for the KYC driver verification screens"
+  },
+  "kycConsentSubtitle": "Complete document verification before accepting towing jobs.",
+  "@kycConsentSubtitle": {
+    "description": "Subtitle on KYC consent screen"
+  },
+  "kycConsentNotice": "Privacy and consent notice: Your documents and selfie are collected strictly for driver verification, towing safety, and fraud prevention. All submissions are reviewed by authorized personnel.",
+  "@kycConsentNotice": {
+    "description": "Privacy and purpose notice on KYC consent screen"
+  },
+  "kycDocIdTitle": "Driver Photo ID",
+  "@kycDocIdTitle": {
+    "description": "Title for ID card upload card"
+  },
+  "kycDocIdDesc": "Clear photo of your Aadhaar Card or Driving License (Rear Camera)",
+  "@kycDocIdDesc": {
+    "description": "Description for ID card upload card"
+  },
+  "kycDocRcTitle": "Vehicle RC Document",
+  "@kycDocRcTitle": {
+    "description": "Title for vehicle RC upload card"
+  },
+  "kycDocRcDesc": "Clear photo of your vehicle registration certificate (Rear Camera)",
+  "@kycDocRcDesc": {
+    "description": "Description for vehicle RC upload card"
+  },
+  "kycDocSelfieTitle": "Driver Selfie",
+  "@kycDocSelfieTitle": {
+    "description": "Title for driver selfie upload card"
+  },
+  "kycDocSelfieDesc": "Front camera photo of your face in good lighting",
+  "@kycDocSelfieDesc": {
+    "description": "Description for driver selfie upload card"
+  },
+  "kycConsentCheckbox": "I consent to the collection and processing of my ID, vehicle RC, and selfie for driver verification.",
+  "@kycConsentCheckbox": {
+    "description": "Consent declaration checkbox label"
+  },
+  "kycAgreeAndContinue": "Agree & Continue",
+  "@kycAgreeAndContinue": {
+    "description": "Button to accept consent and start capture"
+  },
+  "cameraPermissionRequired": "Camera permission is required to capture verification documents.",
+  "@cameraPermissionRequired": {
+    "description": "Error message when camera permission is denied"
+  },
+  "cameraUnavailable": "Camera is unavailable on this device.",
+  "@cameraUnavailable": {
+    "description": "Error message when camera hardware is unavailable"
+  },
+  "cameraCaptureInstructionId": "Fit your Driving License or Photo ID inside the frame.",
+  "@cameraCaptureInstructionId": {
+    "description": "Camera overlay instruction for ID card"
+  },
+  "cameraCaptureInstructionRc": "Fit your Vehicle RC inside the frame.",
+  "@cameraCaptureInstructionRc": {
+    "description": "Camera overlay instruction for RC document"
+  },
+  "cameraCaptureInstructionSelfie": "Position your face inside the oval.",
+  "@cameraCaptureInstructionSelfie": {
+    "description": "Camera overlay instruction for selfie"
+  },
+  "retake": "Retake",
+  "@retake": {
+    "description": "Button to retake a photo"
+  },
+  "usePhoto": "Use Photo",
+  "@usePhoto": {
+    "description": "Button to accept captured photo"
+  },
+  "capturePhoto": "Capture",
+  "@capturePhoto": {
+    "description": "Button to capture camera snapshot"
+  },
+  "kycReviewTitle": "Review Documents",
+  "@kycReviewTitle": {
+    "description": "Title for KYC review screen"
+  },
+  "kycReviewSubtitle": "Ensure all details are sharp, readable, and not blurred.",
+  "@kycReviewSubtitle": {
+    "description": "Subtitle for KYC review screen"
+  },
+  "submitVerification": "Submit for Verification",
+  "@submitVerification": {
+    "description": "Button to submit KYC documents"
+  },
+  "submittingVerification": "Submitting verification...",
+  "@submittingVerification": {
+    "description": "Progress label during KYC upload and submission"
+  },
+  "kycPendingTitle": "Verification Under Review",
+  "@kycPendingTitle": {
+    "description": "Title on KYC pending screen"
+  },
+  "kycPendingSubtitle": "Your documents have been submitted and are under review by our team. You will be notified once verified.",
+  "@kycPendingSubtitle": {
+    "description": "Subtitle on KYC pending screen"
+  },
+  "kycPendingNotice": "Document review typically takes a few hours. Tow dispatch features will activate once approved.",
+  "@kycPendingNotice": {
+    "description": "Notice text on KYC pending screen"
+  },
+  "kycRejectedTitle": "Verification Rejected",
+  "@kycRejectedTitle": {
+    "description": "Title on KYC rejected screen"
+  },
+  "kycRejectedSubtitle": "Your verification was not approved. Please review the reason below and submit fresh documents.",
+  "@kycRejectedSubtitle": {
+    "description": "Subtitle on KYC rejected screen"
+  },
+  "kycRejectionReasonLabel": "Reason for Rejection",
+  "@kycRejectionReasonLabel": {
+    "description": "Label for rejection reason box"
+  },
+  "kycResubmit": "Resubmit Documents",
+  "@kycResubmit": {
+    "description": "Button to start re-verification flow"
+  },
+  "kycDefaultRejectionReason": "Documents were unclear or did not match registration details.",
+  "@kycDefaultRejectionReason": {
+    "description": "Fallback rejection reason if none provided by admin"
+  },
+  "kycUploadError": "Failed to upload document. Please check your network and try again.",
+  "@kycUploadError": {
+    "description": "Error message when storage upload fails"
+  },
+  "kycSubmissionError": "Verification submission failed. Please try again.",
+  "@kycSubmissionError": {
+    "description": "Error message when callable submission fails"
+  },
+  "driverLabel": "Driver",
+  "@driverLabel": {
+    "description": "Label for driver name in details table"
+  },
+  "vehicleLabel": "Vehicle",
+  "@vehicleLabel": {
+    "description": "Label for vehicle number in details table"
+  },
+  "phoneLabel": "Phone",
+  "@phoneLabel": {
+    "description": "Label for phone number in details table"
+  },
+  "statusLabel": "Status",
+  "@statusLabel": {
+    "description": "Label for status in details table"
+  },
+  "underReview": "Under Review",
+  "@underReview": {
+    "description": "Status text indicating documents are under review"
+  },
+  "captured": "Captured",
+  "@captured": {
+    "description": "Status label indicating photo has been captured"
+  },
+  "missing": "Missing",
+  "@missing": {
+    "description": "Status label indicating photo is missing"
+  },
+  "cameraLensUnavailable": "Required camera lens is not available on this device.",
+  "@cameraLensUnavailable": {
+    "description": "Error message when required camera lens direction is missing"
+  },
+  "cameraPermissionPermanentlyDenied": "Camera permission is permanently denied. Please enable it in Settings.",
+  "@cameraPermissionPermanentlyDenied": {
+    "description": "Error message when camera permission is permanently denied"
+  },
+  "photoCaptureFailed": "Failed to capture photo. Please try again.",
+  "@photoCaptureFailed": {
+    "description": "Error message when taking photo fails"
+  },
+  "kycGenericError": "An error occurred during verification. Please try again.",
+  "@kycGenericError": {
+    "description": "Generic KYC error message"
+  },
+  "kycSessionExpired": "Session expired. Please log in again.",
+  "@kycSessionExpired": {
+    "description": "Error message when user session expires during KYC"
+  },
+  "kycDocumentsMissing": "All required documents must be captured before submission.",
+  "@kycDocumentsMissing": {
+    "description": "Error message when documents are missing upon submission"
+  },
+  "kycNetworkError": "Network error. Please check your connection and try again.",
+  "@kycNetworkError": {
+    "description": "Error message when network error occurs during KYC"
   }
 }

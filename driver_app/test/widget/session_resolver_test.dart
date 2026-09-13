@@ -103,6 +103,7 @@ void main() {
         truckType: TruckType.hydraulic,
         vehicleNumber: 'MH 14 CC 1234',
         isOnDuty: false,
+        verificationStatus: 'approved',
       );
       final profileService = MockProfileService(const ProfileCompleted(completedProfile));
 
@@ -149,6 +150,7 @@ void main() {
         truckType: TruckType.hydraulic,
         vehicleNumber: 'MH 14 CC 1234',
         isOnDuty: false,
+        verificationStatus: 'approved',
       );
 
       await tester.pumpWidget(
@@ -192,6 +194,7 @@ void main() {
         truckType: TruckType.hydraulic,
         vehicleNumber: 'MH 14 CC 1234',
         isOnDuty: false,
+        verificationStatus: 'approved',
       );
 
       profileService = ControllableMockProfileService(
@@ -502,6 +505,7 @@ void main() {
         'truckType': 'hydraulic',
         'vehicleNumber': 'MH 12 AB 1234',
         'isOnDuty': false,
+        'verificationStatus': 'approved',
       };
 
       docStreamController.add(FakeDocumentSnapshot('driver_test_999', canonicalDoc, true));
@@ -541,7 +545,7 @@ void main() {
         'canFlatbed': true,
         'canPulling': true,
         'activeJobId': null,
-        'verificationStatus': 'verified',
+        'verificationStatus': 'approved',
       };
 
       docStreamController.add(FakeDocumentSnapshot('driver_test_999', serverOwnedDoc, true));
@@ -549,6 +553,43 @@ void main() {
 
       expect(find.text('Driver app setup complete'), findsOneWidget);
       expect(find.text('Suresh Raina'), findsOneWidget);
+
+      await docStreamController.close();
+    });
+
+    testWidgets('production chain: legacy verificationStatus "verified" fails closed to ProfileMalformed', (tester) async {
+      final docStreamController = StreamController<DocumentSnapshot<Map<String, dynamic>>>.broadcast();
+      final realProfileService = ProfileService(
+        firestore: FakeFirestore(FakeCollectionRef(FakeDocRef(docStreamController.stream))),
+      );
+
+      await tester.pumpWidget(
+        createTestWidget(
+          child: SessionResolver(
+            authService: authService,
+            profileService: realProfileService,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final legacyDoc = {
+        'uid': 'driver_test_999',
+        'name': 'Suresh Raina',
+        'phone': '+919876543210',
+        'truckType': 'hydraulic',
+        'vehicleNumber': 'MH 12 AB 1234',
+        'isOnDuty': false,
+        'verificationStatus': 'verified',
+      };
+
+      docStreamController.add(FakeDocumentSnapshot('driver_test_999', legacyDoc, true));
+      await tester.pump();
+
+      expect(find.text('Driver profile data is invalid. Please contact support.'), findsOneWidget);
+      expect(find.text('Driver app setup complete'), findsNothing);
+      expect(find.byType(ProfileSetupScreen), findsNothing);
+      expect(find.text('Retry'), findsNothing);
 
       await docStreamController.close();
     });

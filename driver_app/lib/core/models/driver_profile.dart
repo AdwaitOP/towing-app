@@ -9,6 +9,9 @@ class DriverProfile {
   final TruckType truckType;
   final String vehicleNumber;
   final bool isOnDuty;
+  final String? verificationStatus;
+  final Map<String, dynamic>? verificationDocs;
+  final String? rejectionReason;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -19,9 +22,18 @@ class DriverProfile {
     required this.truckType,
     required this.vehicleNumber,
     this.isOnDuty = false,
+    this.verificationStatus,
+    this.verificationDocs,
+    this.rejectionReason,
     this.createdAt,
     this.updatedAt,
   });
+
+  bool get isApproved => verificationStatus == 'approved';
+  bool get isPendingVerification => verificationStatus == 'pending';
+  bool get isRejectedVerification => verificationStatus == 'rejected';
+  bool get isUnsubmittedVerification =>
+      verificationStatus == null || verificationStatus!.isEmpty;
 
   /// Returns true if all required Stage 1 profile fields are populated.
   bool get isCompleted {
@@ -102,6 +114,54 @@ class DriverProfile {
       throw FormatException('Driver profile isOnDuty must be a boolean, got ${rawIsOnDuty.runtimeType}');
     }
 
+    final rawVerificationStatus = data['verificationStatus'];
+    String? parsedVerificationStatus;
+    if (rawVerificationStatus != null) {
+      if (rawVerificationStatus is! String) {
+        throw FormatException('Driver profile verificationStatus must be a string, got ${rawVerificationStatus.runtimeType}');
+      }
+      if (rawVerificationStatus != 'pending' &&
+          rawVerificationStatus != 'approved' &&
+          rawVerificationStatus != 'rejected') {
+        throw FormatException('Driver profile contains invalid verificationStatus: "$rawVerificationStatus"');
+      }
+      parsedVerificationStatus = rawVerificationStatus;
+    }
+
+    final rawVerificationDocs = data['verificationDocs'];
+    Map<String, dynamic>? parsedVerificationDocs;
+    if (rawVerificationDocs != null) {
+      if (rawVerificationDocs is! Map) {
+        throw FormatException('Driver profile verificationDocs must be a map, got ${rawVerificationDocs.runtimeType}');
+      }
+      final docsMap = Map<String, dynamic>.from(rawVerificationDocs);
+      for (final key in ['idPhotoUrl', 'rcPhotoUrl', 'selfiePhotoUrl']) {
+        if (!docsMap.containsKey(key) || docsMap[key] == null) {
+          throw FormatException('Driver profile verificationDocs missing required field: $key');
+        }
+        if (docsMap[key] is! String || (docsMap[key] as String).trim().isEmpty) {
+          throw FormatException('Driver profile verificationDocs.$key must be a non-empty string');
+        }
+      }
+      if (!docsMap.containsKey('submittedAt') || docsMap['submittedAt'] == null) {
+        throw const FormatException('Driver profile verificationDocs missing required field: submittedAt');
+      }
+      final rawSubmittedAt = docsMap['submittedAt'];
+      if (rawSubmittedAt is! Timestamp && rawSubmittedAt is! DateTime) {
+        throw FormatException('Driver profile verificationDocs.submittedAt must be a Timestamp, got ${rawSubmittedAt.runtimeType}');
+      }
+      parsedVerificationDocs = docsMap;
+    }
+
+    final rawRejectionReason = data['rejectionReason'];
+    String? parsedRejectionReason;
+    if (rawRejectionReason != null) {
+      if (rawRejectionReason is! String) {
+        throw FormatException('Driver profile rejectionReason must be a string, got ${rawRejectionReason.runtimeType}');
+      }
+      parsedRejectionReason = rawRejectionReason.trim();
+    }
+
     DateTime? parseTimestamp(dynamic value, String fieldName) {
       if (value == null) return null;
       if (value is Timestamp) return value.toDate();
@@ -116,6 +176,9 @@ class DriverProfile {
       truckType: parsedTruckType,
       vehicleNumber: rawVehicleNumber.trim(),
       isOnDuty: (rawIsOnDuty as bool?) ?? false,
+      verificationStatus: parsedVerificationStatus,
+      verificationDocs: parsedVerificationDocs,
+      rejectionReason: parsedRejectionReason,
       createdAt: parseTimestamp(data['createdAt'], 'createdAt'),
       updatedAt: parseTimestamp(data['updatedAt'], 'updatedAt'),
     );
@@ -149,6 +212,9 @@ class DriverProfile {
     TruckType? truckType,
     String? vehicleNumber,
     bool? isOnDuty,
+    String? verificationStatus,
+    Map<String, dynamic>? verificationDocs,
+    String? rejectionReason,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -159,6 +225,9 @@ class DriverProfile {
       truckType: truckType ?? this.truckType,
       vehicleNumber: vehicleNumber ?? this.vehicleNumber,
       isOnDuty: isOnDuty ?? this.isOnDuty,
+      verificationStatus: verificationStatus ?? this.verificationStatus,
+      verificationDocs: verificationDocs ?? this.verificationDocs,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -174,7 +243,9 @@ class DriverProfile {
           phone == other.phone &&
           truckType == other.truckType &&
           vehicleNumber == other.vehicleNumber &&
-          isOnDuty == other.isOnDuty;
+          isOnDuty == other.isOnDuty &&
+          verificationStatus == other.verificationStatus &&
+          rejectionReason == other.rejectionReason;
 
   @override
   int get hashCode =>
@@ -183,5 +254,7 @@ class DriverProfile {
       phone.hashCode ^
       truckType.hashCode ^
       vehicleNumber.hashCode ^
-      isOnDuty.hashCode;
+      isOnDuty.hashCode ^
+      verificationStatus.hashCode ^
+      rejectionReason.hashCode;
 }

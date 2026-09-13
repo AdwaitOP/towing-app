@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:driver_app/core/config/app_config.dart';
 import 'package:driver_app/core/config/firebase_options.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -165,19 +166,21 @@ void main() {
         const exactApp = '1:999888777:android:999888777';
         const exactProj = 'exact-production-project-id';
         const exactSender = '999888777666';
+        const exactBucket = 'exact-storage-bucket.appspot.com';
 
         final options = FirebaseBootstrap.buildProductionOptions(
           apiKey: exactKey,
           appId: exactApp,
           projectId: exactProj,
           messagingSenderId: exactSender,
+          storageBucket: exactBucket,
         );
 
         expect(options.apiKey, equals(exactKey));
         expect(options.appId, equals(exactApp));
         expect(options.projectId, equals(exactProj));
         expect(options.messagingSenderId, equals(exactSender));
-        expect(options.storageBucket, isNull);
+        expect(options.storageBucket, equals(exactBucket));
       });
     });
 
@@ -283,9 +286,124 @@ void main() {
             appId: '',
             projectId: '',
             messagingSenderId: '',
+            storageBucket: '',
           ),
           throwsStateError,
         );
+      });
+    });
+
+    group('Stage 2 Firebase Bootstrap & Storage Bucket Integrity (Finding #5)', () {
+      test('emulator mode has deterministic emulator storageBucket', () {
+        expect(AppConfig.emulatorStorageBucket, equals('towing-app.appspot.com'));
+        expect(AppConfig.storageEmulatorPort, equals(9199));
+      });
+
+      test('production mode requires storageBucket and fails closed when absent or whitespace', () {
+        expect(
+          () => FirebaseBootstrap.buildProductionOptions(
+            apiKey: 'apiKey',
+            appId: 'appId',
+            projectId: 'proj',
+            messagingSenderId: '12345',
+            storageBucket: '',
+          ),
+          throwsStateError,
+        );
+
+        expect(
+          () => FirebaseBootstrap.buildProductionOptions(
+            apiKey: 'apiKey',
+            appId: 'appId',
+            projectId: 'proj',
+            messagingSenderId: '12345',
+            storageBucket: '   ',
+          ),
+          throwsStateError,
+        );
+      });
+
+      test('production mode accepts valid storageBucket and does not leak emulator endpoints', () {
+        final options = FirebaseBootstrap.buildProductionOptions(
+          apiKey: 'apiKey',
+          appId: 'appId',
+          projectId: 'proj',
+          messagingSenderId: '12345',
+          storageBucket: 'my-prod-bucket.appspot.com',
+        );
+        expect(options.storageBucket, equals('my-prod-bucket.appspot.com'));
+      });
+    });
+
+    group('Storage Emulator Setup Awaited & Fail-Closed Integrity (Medium 2)', () {
+      setUp(() {
+        FirebaseBootstrap.authEmulatorConnector = (host, port) async {};
+        FirebaseBootstrap.firestoreEmulatorConnector = (host, port) {};
+        FirebaseBootstrap.storageEmulatorConnector = (host, port) async {};
+        FirebaseBootstrap.functionsEmulatorConnector = (host, port) {};
+      });
+
+      tearDown(() {
+        FirebaseBootstrap.authEmulatorConnector = null;
+        FirebaseBootstrap.firestoreEmulatorConnector = null;
+        FirebaseBootstrap.storageEmulatorConnector = null;
+        FirebaseBootstrap.functionsEmulatorConnector = null;
+      });
+
+      test('Storage emulator setup held pending keeps connectToEmulators pending until released', () async {
+        final completer = Completer<void>();
+        bool storageSetupCompleted = false;
+        bool connectCompleted = false;
+
+        FirebaseBootstrap.storageEmulatorConnector = (host, port) async {
+          await completer.future;
+          storageSetupCompleted = true;
+        };
+
+        final future = FirebaseBootstrap.connectToEmulators().then((_) {
+          connectCompleted = true;
+        });
+
+        await Future<void>.delayed(Duration.zero);
+        expect(storageSetupCompleted, isFalse);
+        expect(connectCompleted, isFalse);
+
+        completer.complete();
+        await future;
+
+        expect(storageSetupCompleted, isTrue);
+        expect(connectCompleted, isTrue);
+      });
+
+      test('Storage emulator setup failure fails connectToEmulators immediately without unhandled async error', () async {
+        FirebaseBootstrap.storageEmulatorConnector = (host, port) async {
+          throw Exception('Storage emulator offline on port $port');
+        };
+
+        expect(
+          () => FirebaseBootstrap.connectToEmulators(),
+          throwsA(isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('Storage emulator offline on port 9199'),
+          )),
+        );
+      });
+
+      test('Functions emulator configuration executes strictly AFTER Storage setup succeeds', () async {
+        final executionOrder = <String>[];
+
+        FirebaseBootstrap.storageEmulatorConnector = (host, port) async {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          executionOrder.add('storage');
+        };
+        FirebaseBootstrap.functionsEmulatorConnector = (host, port) {
+          executionOrder.add('functions');
+        };
+
+        await FirebaseBootstrap.connectToEmulators();
+
+        expect(executionOrder, equals(['storage', 'functions']));
       });
     });
   });

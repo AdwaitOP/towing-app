@@ -20,8 +20,47 @@ class FakeTimestamp {
   toDate() { return new Date(this.ms); }
 }
 
+class FakeServerTimestampTransform {
+  constructor() {
+    this._isServerTimestamp = true;
+    this._methodName = 'serverTimestamp';
+  }
+}
+
+const FakeFieldValue = {
+  serverTimestamp: () => new FakeServerTimestampTransform(),
+};
+
+function isServerTimestampSentinel(val) {
+  return Boolean(
+    val &&
+    typeof val === 'object' &&
+    (val instanceof FakeServerTimestampTransform ||
+      val._isServerTimestamp === true ||
+      val.constructor?.name === 'ServerTimestampTransform')
+  );
+}
+
+function resolveTransforms(value, commitTime = Date.now()) {
+  if (value === undefined || value === null) return value;
+  if (isServerTimestampSentinel(value)) {
+    return FakeTimestamp.fromMillis(commitTime);
+  }
+  if (value instanceof FakeTimestamp) return new FakeTimestamp(value.seconds, value.nanoseconds);
+  if (value instanceof GeoPoint) return new GeoPoint(value.latitude, value.longitude);
+  if (value instanceof Date) return new Date(value.getTime());
+  if (Array.isArray(value)) return value.map(v => resolveTransforms(v, commitTime));
+  if (typeof value === 'object') {
+    const copy = {};
+    for (const [k, v] of Object.entries(value)) copy[k] = resolveTransforms(v, commitTime);
+    return copy;
+  }
+  return value;
+}
+
 function clone(value) {
   if (value === undefined || value === null) return value;
+  if (isServerTimestampSentinel(value)) return value;
   if (value instanceof FakeTimestamp) return new FakeTimestamp(value.seconds, value.nanoseconds);
   if (value instanceof GeoPoint) return new GeoPoint(value.latitude, value.longitude);
   if (value instanceof Date) return new Date(value.getTime());
@@ -119,6 +158,7 @@ class FakeFirestore {
     this.data = clone(seed);
     this.autoId = 0;
     this._transactionTail = Promise.resolve();
+    this.lastTransactionUpdates = [];
   }
   collection(path) { return new FakeCollectionReference(this, path); }
   doc(path) {
@@ -136,13 +176,23 @@ class FakeFirestore {
       const working = clone(this.data);
       const transaction = {
         get: async (ref) => this._snapshot(ref.path, ref.id, working),
-        set: (ref, value, options) => this._set(ref.path, ref.id, value, options, working),
+        set: (ref, value, options) => {
+          this.lastTransactionUpdates.push({ type: 'set', ref, value: clone(value) });
+          this._set(ref.path, ref.id, value, options, working);
+        },
         create: (ref, value) => {
           if (working[ref.path]?.[ref.id] !== undefined) throw new Error('Document exists');
+          this.lastTransactionUpdates.push({ type: 'create', ref, value: clone(value) });
           this._set(ref.path, ref.id, value, {}, working);
         },
-        update: (ref, value) => this._update(ref.path, ref.id, value, working),
-        delete: (ref) => this._delete(ref.path, ref.id, working),
+        update: (ref, value) => {
+          this.lastTransactionUpdates.push({ type: 'update', ref, value: clone(value) });
+          this._update(ref.path, ref.id, value, working);
+        },
+        delete: (ref) => {
+          this.lastTransactionUpdates.push({ type: 'delete', ref });
+          this._delete(ref.path, ref.id, working);
+        },
       };
       const result = await callback(transaction);
       this.data = working;
@@ -158,15 +208,16 @@ class FakeFirestore {
   }
   _set(path, id, value, options = {}, target) {
     if (!target[path]) target[path] = {};
+    const resolved = resolveTransforms(value);
     if (options.merge && target[path][id]) {
-      target[path][id] = { ...target[path][id], ...clone(value) };
+      target[path][id] = { ...target[path][id], ...resolved };
     } else {
-      target[path][id] = clone(value);
+      target[path][id] = resolved;
     }
   }
   _update(path, id, value, target) {
     if (!target[path]?.[id]) throw new Error(`Document ${path}/${id} does not exist`);
-    target[path][id] = { ...target[path][id], ...clone(value) };
+    target[path][id] = { ...target[path][id], ...resolveTransforms(value) };
   }
   _delete(path, id, target) {
     if (target[path]) delete target[path][id];
@@ -195,4 +246,7 @@ module.exports = {
   FakeFirestore,
   FakeTimestamp,
   FakeTaskQueue,
+  FakeFieldValue,
+  FakeServerTimestampTransform,
+  isServerTimestampSentinel,
 };
