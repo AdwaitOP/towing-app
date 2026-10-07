@@ -41,8 +41,7 @@ service cloud.firestore {
     }
 
     function driverUpdateAllowedFields() {
-      return ['name', 'truckType', 'vehicleNumber', 'isOnDuty',
-              'location', 'locationUpdatedAt', 'updatedAt'].toSet();
+      return ['name', 'truckType', 'vehicleNumber', 'updatedAt'].toSet();
     }
 
     function isValidTruckType(type) {
@@ -63,7 +62,7 @@ service cloud.firestore {
           && d.truckType is string
           && isValidTruckType(d.truckType)
           && d.vehicleNumber is string
-          && d.isOnDuty is bool
+          && d.isOnDuty == false
           && d.createdAt is timestamp
           && d.updatedAt is timestamp;
     }
@@ -84,21 +83,8 @@ service cloud.firestore {
           && d.truckType is string
           && isValidTruckType(d.truckType)
           && d.vehicleNumber is string
-          && d.isOnDuty is bool
-          && d.createdAt is timestamp
-          && d.updatedAt is timestamp
-          && (!('location' in d) || d.location == null || d.location is latlng)
-          && (!('locationUpdatedAt' in d)
-              || d.locationUpdatedAt == null
-              || d.locationUpdatedAt is timestamp);
-    }
-
-    function driverLocationWriteIsPaired() {
-      return !driverChangedKeys().hasAny(['location', 'locationUpdatedAt'])
-          || (driverChangedKeys().hasAny(['locationUpdatedAt'])
-              && 'location' in request.resource.data
-              && request.resource.data.location is latlng
-              && request.resource.data.locationUpdatedAt == request.time);
+          && d.createdAt == resource.data.createdAt
+          && d.updatedAt is timestamp;
     }
 
     function driverUpdatedAtIsCurrent() {
@@ -123,10 +109,14 @@ service cloud.firestore {
                     && driverUpdateIsAllowListed()
                     && driverUpdateValidTypes(request.resource.data)
                     && driverUpdatedAtIsCurrent()
-                    && driverLocationWriteIsPaired()
                     && driverVehicleWriteIsAllowed();
 
       allow delete: if false;
+
+      match /activation_intents/{intentId} {
+        allow read: if isOwner(driverId) || isAdmin();
+        allow write: if false;
+      }
     }
 
     // Raw jobs contain customer, payment, invoice, lease, and refund data.
@@ -150,6 +140,12 @@ service cloud.firestore {
 
     match /wallet_entries/{operationId} {
       allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /wallet_topup_attempts/{topupId} {
+      allow read: if isAdmin()
+                  || (isAuthenticated() && resource.data.driverId == request.auth.uid);
       allow write: if false;
     }
 

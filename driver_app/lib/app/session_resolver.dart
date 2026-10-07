@@ -1,10 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../core/services/auth_service.dart';
+import '../core/services/offer_service.dart';
 import '../core/services/profile_service.dart';
 import '../features/auth/controllers/auth_controller.dart';
 import '../features/auth/screens/phone_login_screen.dart';
-import '../features/home/screens/stage1_home_screen.dart';
+import '../features/hub/screens/dispatch_hub_screen.dart';
+import '../features/job/screens/active_job_screen.dart';
 import '../features/kyc/flow/kyc_flow.dart';
 import '../features/kyc/screens/kyc_pending_screen.dart';
 import '../features/profile/controllers/profile_controller.dart';
@@ -12,6 +14,7 @@ import '../features/profile/screens/profile_setup_screen.dart';
 import '../theme/app_colors.dart';
 
 import '../l10n/app_localizations.dart';
+import 'logout_coordinator.dart';
 
 /// Root state-driven widget that resolves between:
 /// 1. Unauthenticated -> PhoneLoginScreen
@@ -22,12 +25,14 @@ import '../l10n/app_localizations.dart';
 class SessionResolver extends StatefulWidget {
   final AuthService authService;
   final ProfileService profileService;
+  final OfferService? offerService;
   final Function(Locale)? onLocaleChanged;
 
   const SessionResolver({
     super.key,
     required this.authService,
     required this.profileService,
+    this.offerService,
     this.onLocaleChanged,
   });
 
@@ -118,7 +123,7 @@ class _SessionResolverState extends State<SessionResolver> {
               return _ProfileErrorScreen(
                 message: l10n.profileLoadError,
                 onRetry: () => _retryProfileStream(user.uid),
-                onLogout: () => widget.authService.signOut(),
+                onLogout: () => AppLogoutCoordinator(authService: widget.authService).coordinateLogout(context: context),
               );
             }
 
@@ -142,9 +147,21 @@ class _SessionResolverState extends State<SessionResolver> {
                     initialStep: KycFlowInitialStep.rejected,
                   );
                 } else if (profile.isApproved) {
-                  return Stage1HomeScreen(
+                  if (profile.hasActiveJob) {
+                    return ActiveJobScreen(
+                      key: ValueKey('active_job_${profile.activeJobId}'),
+                      jobId: profile.activeJobId!,
+                      profile: profile,
+                      authService: widget.authService,
+                      offerService: widget.offerService,
+                      onLocaleChanged: widget.onLocaleChanged,
+                    );
+                  }
+                  return DispatchHubScreen(
+                    key: ValueKey('dispatch_hub_${user.uid}'),
                     profile: profile,
                     authService: widget.authService,
+                    offerService: widget.offerService,
                     onLocaleChanged: widget.onLocaleChanged,
                   );
                 } else {
@@ -181,14 +198,14 @@ class _SessionResolverState extends State<SessionResolver> {
                 return _ProfileErrorScreen(
                   message: l10n.profileMalformedError,
                   onRetry: null, // Fail-closed: cannot overwrite corrupt backend record
-                  onLogout: () => widget.authService.signOut(),
+                  onLogout: () => AppLogoutCoordinator(authService: widget.authService).coordinateLogout(context: context),
                 );
 
               case ProfileError():
                 return _ProfileErrorScreen(
                   message: l10n.profileLoadError,
                   onRetry: () => _retryProfileStream(user.uid),
-                  onLogout: () => widget.authService.signOut(),
+                  onLogout: () => AppLogoutCoordinator(authService: widget.authService).coordinateLogout(context: context),
                 );
             }
           },

@@ -200,7 +200,7 @@ void main() {
       expect(enabledButton.onPressed, isNotNull);
     });
 
-    testWidgets('logout action triggers authService signOut', (tester) async {
+    testWidgets('logout without fresh server authority stays signed in', (tester) async {
       await tester.pumpWidget(
         createTestWidget(
           child: KycConsentScreen(
@@ -214,7 +214,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.logout));
       await tester.pump();
 
-      expect(authService.signOutCalled, isTrue);
+      expect(authService.signOutCalled, isFalse);
     });
   });
 
@@ -263,7 +263,7 @@ void main() {
       await tester.tap(find.text('Logout'));
       await tester.pump();
 
-      expect(authService.signOutCalled, isTrue);
+      expect(authService.signOutCalled, isFalse);
     });
 
     testWidgets('renders Hindi details table labels without English leak', (tester) async {
@@ -389,7 +389,7 @@ void main() {
       expect(find.text('Documents were unclear or did not match registration details.'), findsOneWidget);
     });
 
-    testWidgets('sign out button triggers authService signOut', (tester) async {
+    testWidgets('sign out button cannot bypass fresh server authority', (tester) async {
       await tester.pumpWidget(
         createTestWidget(
           child: KycRejectedScreen(
@@ -403,7 +403,7 @@ void main() {
       await tester.tap(find.text('Logout'));
       await tester.pump();
 
-      expect(authService.signOutCalled, isTrue);
+      expect(authService.signOutCalled, isFalse);
     });
   });
 

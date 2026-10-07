@@ -11,6 +11,16 @@ import 'app_config.dart';
 /// When running against local Firebase emulators (`--dart-define=USE_FIREBASE_EMULATOR=true`),
 /// points Firebase Auth and Cloud Firestore to the respective emulator ports configured in `firebase.json`.
 class FirebaseBootstrap {
+  /// Synthetic local-only options. Android Installations validates API-key
+  /// syntax when callable Functions builds its context, even with an emulator.
+  static FirebaseOptions buildEmulatorOptions() => FirebaseOptions(
+    apiKey: 'AIzaSy000000000000000000000000000000000',
+    appId: '1:000000000000:android:0000000000000000000000',
+    messagingSenderId: '000000000000',
+    projectId: AppConfig.emulatorProjectId,
+    storageBucket: AppConfig.emulatorStorageBucket,
+  );
+
   /// Validates and constructs production [FirebaseOptions] from authoritative configuration.
   /// Fails closed (throws [StateError]) if any required value is missing, blank, or a fabricated sentinel.
   static FirebaseOptions buildProductionOptions({
@@ -50,18 +60,13 @@ class FirebaseBootstrap {
     );
   }
 
-  static Future<void> initialize() async {
+  static Future<void> initialize({bool? useEmulator}) async {
+    final effectiveUseEmulator = useEmulator ?? AppConfig.useFirebaseEmulator;
     if (Firebase.apps.isEmpty) {
-      if (AppConfig.useFirebaseEmulator) {
-        // In EMULATOR mode: use emulator-specific dummy options to bootstrap client SDKs
+      if (effectiveUseEmulator) {
+        // In EMULATOR / DEBUG mode: use emulator-specific dummy options to bootstrap client SDKs
         await Firebase.initializeApp(
-          options: FirebaseOptions(
-            apiKey: 'emulator-dummy-api-key',
-            appId: '1:000000000000:android:0000000000000000000000',
-            messagingSenderId: '000000000000',
-            projectId: AppConfig.emulatorProjectId,
-            storageBucket: AppConfig.emulatorStorageBucket,
-          ),
+          options: buildEmulatorOptions(),
         );
       } else {
         // In PRODUCTION mode: must come strictly from authoritative environment variables.
@@ -74,7 +79,7 @@ class FirebaseBootstrap {
       }
     }
 
-    if (AppConfig.useFirebaseEmulator) {
+    if (effectiveUseEmulator) {
       await connectToEmulators();
     }
   }
@@ -91,25 +96,41 @@ class FirebaseBootstrap {
     if (authEmulatorConnector != null) {
       await authEmulatorConnector!(host, AppConfig.authEmulatorPort);
     } else {
-      await FirebaseAuth.instance.useAuthEmulator(host, AppConfig.authEmulatorPort);
+      await FirebaseAuth.instance.useAuthEmulator(
+        host,
+        AppConfig.authEmulatorPort,
+        automaticHostMapping: false,
+      );
     }
 
     if (firestoreEmulatorConnector != null) {
       firestoreEmulatorConnector!(host, AppConfig.firestoreEmulatorPort);
     } else {
-      FirebaseFirestore.instance.useFirestoreEmulator(host, AppConfig.firestoreEmulatorPort);
+      FirebaseFirestore.instance.useFirestoreEmulator(
+        host,
+        AppConfig.firestoreEmulatorPort,
+        automaticHostMapping: false,
+      );
     }
 
     if (storageEmulatorConnector != null) {
       await storageEmulatorConnector!(host, AppConfig.storageEmulatorPort);
     } else {
-      await FirebaseStorage.instance.useStorageEmulator(host, AppConfig.storageEmulatorPort);
+      await FirebaseStorage.instance.useStorageEmulator(
+        host,
+        AppConfig.storageEmulatorPort,
+        automaticHostMapping: false,
+      );
     }
 
     if (functionsEmulatorConnector != null) {
       functionsEmulatorConnector!(host, AppConfig.functionsEmulatorPort);
     } else {
-      FirebaseFunctions.instanceFor(region: 'asia-south1').useFunctionsEmulator(host, AppConfig.functionsEmulatorPort);
+      FirebaseFunctions.instanceFor(region: 'asia-south1').useFunctionsEmulator(
+        host,
+        AppConfig.functionsEmulatorPort,
+        automaticHostMapping: false,
+      );
     }
   }
 }

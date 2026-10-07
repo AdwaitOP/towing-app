@@ -22,6 +22,8 @@
 const { retentionCleanup } = require('./jobs/retentionCleanup');
 exports.retentionCleanup = retentionCleanup;
 
+const { setGlobalOptions } = require('firebase-functions/v2');
+setGlobalOptions({ region: 'asia-south1' });
 const { onRequest } = require('firebase-functions/v2/https');
 
 // ── Phase 3 (implemented) ───────────────────────────────────────────────────
@@ -167,6 +169,27 @@ exports.reconcileNotifications = onSchedule({
 // ── Phase 5 Stage 2 KYC driver verification ──────────────────────────────────
 const { submitDriverVerification } = require('./dispatch/submitDriverVerification');
 exports.submitDriverVerification = submitDriverVerification;
+
+// ── Phase 5 Stage 3 Duty Sessions & Heartbeats ──────────────────────────────
+const { prepareDutyActivation } = require('./duty/prepareDutyActivation');
+const { startDutySession } = require('./duty/startDutySession');
+const { cancelDutyActivation } = require('./duty/cancelDutyActivation');
+const { endDutySession } = require('./duty/endDutySession');
+const { reportLocationHeartbeat } = require('./duty/reportLocationHeartbeat');
+const { recoverActiveJobSession } = require('./duty/recoverActiveJobSession');
+const { reconcileOrphanedDutyLeases } = require('./dispatch/reconcileOrphanedDutyLeases');
+
+exports.prepareDutyActivation = prepareDutyActivation;
+exports.startDutySession = startDutySession;
+exports.cancelDutyActivation = cancelDutyActivation;
+exports.endDutySession = endDutySession;
+exports.reportLocationHeartbeat = reportLocationHeartbeat;
+exports.recoverActiveJobSession = recoverActiveJobSession;
+exports.reconcileOrphanedDutyLeases = reconcileOrphanedDutyLeases;
+
+// ── Phase 5 Stage 4 Wallet Top-Up ──────────────────────────────────────────
+const { initiateWalletTopup } = require('./wallet/topupService');
+exports.initiateWalletTopup = initiateWalletTopup;
 
 
 // ── Phase 6 (placeholder) ────────────────────────────────────────────────────

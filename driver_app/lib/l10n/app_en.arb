@@ -381,5 +381,456 @@
   "kycNetworkError": "Network error. Please check your connection and try again.",
   "@kycNetworkError": {
     "description": "Error message when network error occurs during KYC"
+  },
+  "dispatchHub": "Dispatch Hub",
+  "@dispatchHub": {
+    "description": "Title of the dispatch hub screen"
+  },
+  "onDuty": "ON DUTY",
+  "@onDuty": {
+    "description": "Label for ON DUTY status"
+  },
+  "offDuty": "OFF DUTY",
+  "@offDuty": {
+    "description": "Label for OFF DUTY status"
+  },
+  "goOnDuty": "GO ON DUTY",
+  "@goOnDuty": {
+    "description": "Button label to transition to ON DUTY"
+  },
+  "goOffDuty": "GO OFF DUTY",
+  "@goOffDuty": {
+    "description": "Button label to transition to OFF DUTY"
+  },
+  "hubStatusOnDuty": "You are ON DUTY and available for towing requests.",
+  "@hubStatusOnDuty": {
+    "description": "Detailed status when driver is on duty"
+  },
+  "hubStatusOffDuty": "You are OFF DUTY. Go ON DUTY to receive dispatches.",
+  "@hubStatusOffDuty": {
+    "description": "Detailed status when driver is off duty"
+  },
+  "locationDisclosureTitle": "Location Access & Dispatch",
+  "@locationDisclosureTitle": {
+    "description": "Title for background location disclosure dialog"
+  },
+  "locationDisclosureBody": "Towing Driver collects location data to find nearby towing jobs, calculate routes, and update your position while ON DUTY. This location tracking continues even when the app is in the background or closed while you are ON DUTY.",
+  "@locationDisclosureBody": {
+    "description": "Body text explaining background location collection"
+  },
+  "continueAction": "Continue",
+  "@continueAction": {
+    "description": "Continue button label"
+  },
+  "notNowAction": "Not Now",
+  "@notNowAction": {
+    "description": "Not now button label"
+  },
+  "cancelAction": "Cancel",
+  "@cancelAction": {
+    "description": "Cancel button label"
+  },
+  "locationPermissionRequired": "Location permission is required to go ON DUTY.",
+  "@locationPermissionRequired": {
+    "description": "Error message when location permission is not granted"
+  },
+  "locationPermissionPermanentlyDenied": "Location permission is permanently denied. Please enable it in Settings to go ON DUTY.",
+  "@locationPermissionPermanentlyDenied": {
+    "description": "Error message when location permission is permanently denied"
+  },
+  "locationServicesDisabled": "Location services are turned off. Please enable GPS/Location in Settings.",
+  "@locationServicesDisabled": {
+    "description": "Error message when device location services are disabled"
+  },
+  "backgroundLocationRequired": "Background location permission is required to receive dispatches while navigating.",
+  "@backgroundLocationRequired": {
+    "description": "Error message when background location permission is denied"
+  },
+  "notificationPermissionRequired": "Notification permission is required to run the foreground dispatch service.",
+  "@notificationPermissionRequired": {
+    "description": "Error message when notification permission is denied"
+  },
+  "openSettings": "Open Settings",
+  "@openSettings": {
+    "description": "Button label to open system settings"
+  },
+  "trackingActive": "Location Tracking Active",
+  "@trackingActive": {
+    "description": "Indicator text when location tracking is active"
+  },
+  "trackingUnavailable": "Location Tracking Unavailable",
+  "@trackingUnavailable": {
+    "description": "Indicator text when location tracking cannot run"
+  },
+  "temporaryBanBanner": "You are temporarily paused until {time} due to cancellations.",
+  "@temporaryBanBanner": {
+    "description": "Banner message when driver is temporarily banned",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "cannotGoOffDutyActiveJob": "Cannot go off duty while on an active job.",
+  "@cannotGoOffDutyActiveJob": {
+    "description": "Error message preventing off duty transition during active job"
+  },
+  "reconciliationFailed": "Unable to reconcile duty state. Please check your connection or restart the app.",
+  "@reconciliationFailed": {
+    "description": "Error message when duty state reconciliation fails"
+  },
+  "batteryOptimizationTitle": "Battery Optimization",
+  "@batteryOptimizationTitle": {
+    "description": "Title for battery optimization card"
+  },
+  "batteryOptimizationSubtitle": "For reliable background tracking, ensure battery optimization is set to Unrestricted.",
+  "@batteryOptimizationSubtitle": {
+    "description": "Subtitle explaining battery optimization impact"
+  },
+  "batteryOptimizationAction": "Battery Settings",
+  "@batteryOptimizationAction": {
+    "description": "Button to open battery optimization settings"
+  },
+  "foregroundNotificationTitle": "Towing Driver",
+  "@foregroundNotificationTitle": {
+    "description": "Foreground service notification title"
+  },
+  "foregroundNotificationText": "Sharing live location for dispatch",
+  "@foregroundNotificationText": {
+    "description": "Foreground service notification content"
+  },
+  "mapUnavailable": "Map preview is currently unavailable.",
+  "@mapUnavailable": {
+    "description": "Placeholder text when map fails or is disabled"
+  },
+  "mapTokenMissing": "Mapbox access token is not configured.",
+  "@mapTokenMissing": {
+    "description": "Placeholder subtitle when mapbox token is empty"
+  },
+  "dutyTransitionInProgress": "Updating duty status...",
+  "@dutyTransitionInProgress": {
+    "description": "Loading indicator text during duty state transition"
+  },
+  "dutyServiceStartupFailed": "Failed to start location service. Please try again.",
+  "@dutyServiceStartupFailed": {
+    "description": "Error message when foreground service startup fails"
+  },
+  "dutyAttentionRequired": "Duty status needs attention — live location unavailable",
+  "@dutyAttentionRequired": {
+    "description": "Notice when on duty in Firestore but location tracking is unavailable"
+  },
+  "logoutBlockedActiveJob": "Cannot log out while an active job is assigned.",
+  "@logoutBlockedActiveJob": {
+    "description": "Error message when logout is blocked by an active job"
+  },
+  "logoutBlockedActiveOffer": "Cannot log out while a job offer is pending.",
+  "@logoutBlockedActiveOffer": {
+    "description": "Error message when logout is blocked by a pending offer"
+  },
+  "logoutFailedDutyTransition": "Failed to end duty session safely. Please try again.",
+  "@logoutFailedDutyTransition": {
+    "description": "Error message when duty deactivation fails during logout"
+  },
+  "incomingOfferTitle": "Incoming Job Offer",
+  "@incomingOfferTitle": {
+    "description": "Title of the incoming job offer sheet"
+  },
+  "offerExpired": "EXPIRED",
+  "@offerExpired": {
+    "description": "Badge text when the offer has expired"
+  },
+  "offerExpiringIn": "{seconds}s remaining",
+  "@offerExpiringIn": {
+    "description": "Countdown timer badge for expiring offer",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "insufficientWalletForOffer": "Insufficient wallet balance. Deposit ₹{commission} to accept this offer.",
+  "@insufficientWalletForOffer": {
+    "description": "Truthful warning banner when wallet balance is insufficient for offer commission",
+    "placeholders": {
+      "commission": {
+        "type": "String"
+      }
+    }
+  },
+  "pickupLocation": "Pickup Location",
+  "@pickupLocation": {
+    "description": "Label for pickup coordinates or address"
+  },
+  "destinationLocation": "Destination",
+  "@destinationLocation": {
+    "description": "Label for destination coordinates or address"
+  },
+  "pickupDistance": "Distance",
+  "@pickupDistance": {
+    "description": "Label for distance to pickup"
+  },
+  "pickupEta": "ETA",
+  "@pickupEta": {
+    "description": "Label for estimated time of arrival to pickup"
+  },
+  "truckTypeLabel": "Truck Type",
+  "@truckTypeLabel": {
+    "description": "Label for requested truck type"
+  },
+  "estimatedEarnings": "Estimated Fare",
+  "@estimatedEarnings": {
+    "description": "Label for estimated gross tow fare"
+  },
+  "commissionFee": "Platform Fee",
+  "@commissionFee": {
+    "description": "Label for platform commission deduction"
+  },
+  "declineOffer": "DECLINE",
+  "@declineOffer": {
+    "description": "Button to decline incoming job offer"
+  },
+  "acceptOffer": "ACCEPT JOB",
+  "@acceptOffer": {
+    "description": "Button to accept incoming job offer"
+  },
+  "retryAcceptOffer": "RETRY ACCEPT",
+  "@retryAcceptOffer": {
+    "description": "Button label to retry accept with preserved requestId after network timeout"
+  },
+  "activeJobTitle": "Active Job",
+  "@activeJobTitle": {
+    "description": "Title of active job screen"
+  },
+  "activeJobStatusAssigned": "ASSIGNED",
+  "@activeJobStatusAssigned": {
+    "description": "Status badge for newly assigned active job"
+  },
+  "jobIdLabel": "Job ID",
+  "@jobIdLabel": {
+    "description": "Label for job ID identifier"
+  },
+  "routeDetailsTitle": "Route Details",
+  "@routeDetailsTitle": {
+    "description": "Heading for route details card"
+  },
+  "paymentSummaryTitle": "Fare & Commission",
+  "@paymentSummaryTitle": {
+    "description": "Heading for payment summary card"
+  },
+  "cancellationPolicyTitle": "Cancellation Policy",
+  "@cancellationPolicyTitle": {
+    "description": "Heading for cancellation policy card"
+  },
+  "cancellationPolicyDescription": "You have {freeCount} free cancellation(s) this month. Late cancellations may incur penalties.",
+  "@cancellationPolicyDescription": {
+    "description": "Description of cancellation policy snapshot",
+    "placeholders": {
+      "freeCount": {
+        "type": "String"
+      }
+    }
+  },
+  "activeJobBatchNotice": "Batch 1 presentation shell: State tracking active. Action buttons (Start Tow, Complete, Cancel) will activate in Batch 2.",
+  "@activeJobBatchNotice": {
+    "description": "Notice explaining Batch 1 presentation state on active job screen"
+  },
+  "walletBalance": "Wallet Balance",
+  "@walletBalance": {
+    "description": "Label for driver wallet balance"
+  },
+  "walletTopup": "Top Up",
+  "@walletTopup": {
+    "description": "Button label to top up wallet balance"
+  },
+  "walletTopupTitle": "Wallet Top-Up",
+  "@walletTopupTitle": {
+    "description": "Title of wallet top-up sheet"
+  },
+  "enterTopupAmount": "Enter Amount",
+  "@enterTopupAmount": {
+    "description": "Label for custom top-up amount text field"
+  },
+  "topupQuickAmount": "Quick Select",
+  "@topupQuickAmount": {
+    "description": "Label for quick select top-up preset chips"
+  },
+  "topupSubmit": "Top Up Wallet",
+  "@topupSubmit": {
+    "description": "Button to submit wallet top-up"
+  },
+  "topupSuccess": "Wallet top-up initiated (₹{amount}). Balance will update once confirmed.",
+  "@topupSuccess": {
+    "description": "Success message after wallet balance is credited",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "topupFailed": "Wallet top-up failed: {error}",
+  "@topupFailed": {
+    "description": "Error message when wallet top-up fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "topupMinMaxError": "Amount must be between ₹1 and ₹1,00,000",
+  "@topupMinMaxError": {
+    "description": "Validation error for top-up amount out of range"
+  },
+  "lowBalanceWarning": "Low wallet balance: {balance}. Top up to accept high-commission jobs.",
+  "@lowBalanceWarning": {
+    "description": "Informational banner when wallet balance is low",
+    "placeholders": {
+      "balance": {
+        "type": "String"
+      }
+    }
+  },
+  "strictModeActive": "Strict Mode Active",
+  "@strictModeActive": {
+    "description": "Badge indicating driver account is under strict cancellation monitoring"
+  },
+  "strictModeWarning": "Strict Mode Active: Next cancellation incurs 100% penalty and account suspension.",
+  "@strictModeWarning": {
+    "description": "Warning in cancellation preview when strict mode is active"
+  },
+  "monthlyCancellations": "Cancellations this month: {count}",
+  "@monthlyCancellations": {
+    "description": "Display count of cancellations in current month",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "startTow": "START TOW",
+  "@startTow": {
+    "description": "Action button to start towing the customer vehicle"
+  },
+  "markComplete": "MARK COMPLETE",
+  "@markComplete": {
+    "description": "Action button to mark an in-progress tow complete"
+  },
+  "cancelJob": "CANCEL JOB",
+  "@cancelJob": {
+    "description": "Action button for driver to cancel an accepted job"
+  },
+  "jobCompletedSuccess": "Job Completed Successfully",
+  "@jobCompletedSuccess": {
+    "description": "Success message displayed when job completes"
+  },
+  "returnToHub": "RETURN TO HUB",
+  "@returnToHub": {
+    "description": "Button to return to dispatch hub after job completion"
+  },
+  "customerCancelledNotice": "Customer cancellation is in progress. No driver penalty applied. Your wallet balance will update once confirmed.",
+  "@customerCancelledNotice": {
+    "description": "Notice when customer cancels an assigned job"
+  },
+  "cancellationPreviewTitle": "Cancellation Preview",
+  "@cancellationPreviewTitle": {
+    "description": "Title of cancellation preview modal"
+  },
+  "cancellationPreviewNotice": "Estimated preview. The backend server is the sole financial authority.",
+  "@cancellationPreviewNotice": {
+    "description": "Disclaimer indicating preview calculation is non-authoritative"
+  },
+  "freeCancellationsRemaining": "Free cancellations remaining: {count}",
+  "@freeCancellationsRemaining": {
+    "description": "Count of free cancellations remaining this month",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "estimatedDeduction": "Estimated Forfeiture: ₹{amount}",
+  "@estimatedDeduction": {
+    "description": "Estimated forfeiture amount displayed in preview",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "estimatedRefund": "Estimated Refund: ₹{amount}",
+  "@estimatedRefund": {
+    "description": "Estimated refund amount displayed in preview",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "banWarning": "Warning: Cancelling will temporarily suspend your account from duty.",
+  "@banWarning": {
+    "description": "Warning in preview when cancellation threshold will be exceeded"
+  },
+  "confirmCancellation": "CONFIRM CANCELLATION",
+  "@confirmCancellation": {
+    "description": "Button to confirm driver cancellation"
+  },
+  "keepJob": "KEEP JOB",
+  "@keepJob": {
+    "description": "Button to dismiss cancellation modal and keep job"
+  },
+  "actionInProgress": "Please wait...",
+  "@actionInProgress": {
+    "description": "Status text while action request is in flight"
+  },
+  "cancelUnavailableInProgress": "Cancellation is not permitted once tow is in progress.",
+  "@cancelUnavailableInProgress": {
+    "description": "Notice that driver cannot cancel after starting tow"
+  },
+  "testModeNotice": "Test Mode: Simulates instant payment without real money.",
+  "@testModeNotice": {
+    "description": "Notice that wallet top-up operates in test mode"
+  },
+  "navigateToPickup": "NAVIGATE TO PICKUP",
+  "@navigateToPickup": {
+    "description": "Button to open external map navigation to customer pickup location"
+  },
+  "navigateToDestination": "NAVIGATE TO DESTINATION",
+  "@navigateToDestination": {
+    "description": "Button to open external map navigation to job drop-off destination"
+  },
+  "navigationLaunchError": "Unable to launch external navigation map.",
+  "@navigationLaunchError": {
+    "description": "Error message when external map app fails to open"
+  },
+  "activeJobStatusInProgress": "IN PROGRESS",
+  "@activeJobStatusInProgress": {
+    "description": "Status badge when tow is in progress"
+  },
+  "activeJobStatusCompleted": "COMPLETED",
+  "@activeJobStatusCompleted": {
+    "description": "Status badge when job has completed"
+  },
+  "activeJobStatusCancelled": "CANCELLED",
+  "@activeJobStatusCancelled": {
+    "description": "Status badge when job has been cancelled"
+  },
+  "jobCancelledNotice": "Job cancelled. Refund: ₹{refund}, Forfeited: ₹{forfeited}",
+  "@jobCancelledNotice": {
+    "description": "Notice shown when driver successfully cancels an accepted job",
+    "placeholders": {
+      "refund": {
+        "type": "String"
+      },
+      "forfeited": {
+        "type": "String"
+      }
+    }
+  },
+  "retryCancel": "RETRY CANCEL",
+  "@retryCancel": {
+    "description": "Button to retry cancellation with same request ID"
+  },
+  "retryTopup": "RETRY TOP-UP",
+  "@retryTopup": {
+    "description": "Button to retry wallet top-up with same request ID"
   }
 }

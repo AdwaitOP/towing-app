@@ -5,6 +5,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_colors.dart';
 import '../controllers/kyc_controller.dart';
 import 'kyc_camera_screen.dart';
+import '../../../app/logout_coordinator.dart';
 
 class KycConsentScreen extends StatefulWidget {
   final DriverProfile profile;
@@ -71,7 +72,7 @@ class _KycConsentScreenState extends State<KycConsentScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.error),
             tooltip: l10n.logout,
-            onPressed: () => widget.authService.signOut(),
+            onPressed: () => AppLogoutCoordinator(authService: widget.authService).coordinateLogout(profile: widget.profile, context: context),
           ),
         ],
       ),

@@ -29,7 +29,7 @@ function config(TimestampClass, nowMs, overrides = {}) {
 }
 function driver(TimestampClass, nowMs, overrides = {}) {
   return {
-    isOnDuty: true, verificationStatus: 'approved', truckType: 'hydraulic',
+    isOnDuty: true, workerReady: true, verificationStatus: 'approved', truckType: 'hydraulic',
     canFlatbed: true, canPulling: false, bannedUntil: null, activeOfferId: null, activeJobId: null,
     walletBalance: 25000, location: new GeoPoint(18.525, 73.86),
     locationUpdatedAt: TimestampClass.fromMillis(nowMs - 1000), ...overrides,

@@ -163,8 +163,27 @@ function createRazorpayClient({
     return validateRefundResponse(entity, { paymentId, refundId, amount });
   }
 
+  async function createOrder({ amount, currency = 'INR', receipt, notes = {} }) {
+    assertAmount(amount);
+    const entity = await requestJson('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount,
+        currency,
+        receipt,
+        notes,
+      }),
+    });
+    if (!entity || typeof entity !== 'object' || typeof entity.id !== 'string') {
+      throw new ProviderResponseError('Razorpay Order response lacks valid order ID');
+    }
+    return { ...entity, keyId: requireEnv('RAZORPAY_KEY_ID', env) };
+  }
+
   return {
     assertConfigured,
+    createOrder,
     createPaymentLink,
     getPaymentLinksByReferenceId,
     getPaymentLink,
@@ -284,4 +303,5 @@ module.exports = {
   cancelPaymentLink: (...args) => getDefaultClient().cancelPaymentLink(...args),
   createRefund: (...args) => getDefaultClient().createRefund(...args),
   getRefund: (...args) => getDefaultClient().getRefund(...args),
+  createOrder: (...args) => getDefaultClient().createOrder(...args),
 };

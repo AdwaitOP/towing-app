@@ -7,6 +7,7 @@ import 'package:driver_app/core/services/auth_service.dart';
 import 'package:driver_app/core/services/profile_service.dart';
 import 'package:driver_app/features/auth/screens/phone_login_screen.dart';
 import 'package:driver_app/features/home/screens/stage1_home_screen.dart';
+import 'package:driver_app/features/hub/screens/dispatch_hub_screen.dart';
 import 'package:driver_app/features/kyc/flow/kyc_flow.dart';
 import 'package:driver_app/features/kyc/screens/kyc_consent_screen.dart';
 import 'package:driver_app/features/kyc/screens/kyc_pending_screen.dart';
@@ -212,7 +213,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byType(Stage1HomeScreen), findsOneWidget);
+      expect(find.byType(DispatchHubScreen), findsOneWidget);
       expect(find.byType(KycConsentScreen), findsNothing);
       expect(find.byType(KycPendingScreen), findsNothing);
       expect(find.byType(KycRejectedScreen), findsNothing);
@@ -330,7 +331,7 @@ void main() {
       await tester.pump();
 
       expect(find.byType(KycPendingScreen), findsNothing);
-      expect(find.byType(Stage1HomeScreen), findsOneWidget);
+      expect(find.byType(DispatchHubScreen), findsOneWidget);
       expect(find.text('Driver app setup complete'), findsOneWidget);
 
       await streamController.close();

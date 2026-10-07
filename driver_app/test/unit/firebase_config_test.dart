@@ -5,6 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Firebase & AppConfig Configuration Integrity', () {
+    test('local callable options pass Android Installations syntax validation', () {
+      final options = FirebaseBootstrap.buildEmulatorOptions();
+      // Firebase Installations Utils.API_KEY_FORMAT, exercised by callable context.
+      expect(RegExp(r'^A[\w-]{38}$').hasMatch(options.apiKey), isTrue);
+      expect(options.appId.contains(':'), isTrue);
+      expect(options.projectId, AppConfig.emulatorProjectId);
+      expect(options.storageBucket, AppConfig.emulatorStorageBucket);
+    });
+
     test('production mode does not default functionsBaseUrl to localhost and fails closed when absent', () {
       if (!AppConfig.useFirebaseEmulator) {
         // Without explicit --dart-define=FUNCTIONS_BASE_URL, reading functionsBaseUrl must fail closed
@@ -25,6 +34,22 @@ void main() {
           reason: 'FirebaseBootstrap must fail closed rather than injecting fabricated project/api keys',
         );
       }
+    });
+
+    test('explicit production mode (useEmulator: false) fails closed if required Firebase credentials are missing', () async {
+      expect(
+        () => FirebaseBootstrap.initialize(useEmulator: false),
+        throwsStateError,
+        reason: 'FirebaseBootstrap must fail closed rather than injecting fabricated project/api keys',
+      );
+    });
+
+    test('explicit production mode (useEmulator: false) does not default functionsBaseUrl to localhost and fails closed when absent', () {
+      expect(
+        () => AppConfig.resolveFunctionsBaseUrl(useEmulator: false, productionUrl: ''),
+        throwsStateError,
+        reason: 'Production functionsBaseUrl must not default to localhost or arbitrary endpoints',
+      );
     });
 
     test('emulator ports are consistent across Auth, Firestore, and Functions', () {

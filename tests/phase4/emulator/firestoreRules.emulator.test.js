@@ -143,14 +143,45 @@ async function patchFields(path, auth, fields) {
   return firestoreRequest('PATCH', path, auth, documentBody(fields), `?${query}`);
 }
 
+async function beginTransaction(auth) {
+  const result = await rawRequest(`${DATABASE_ROOT}/documents:beginTransaction`, {
+    method: 'POST',
+    auth,
+    body: { options: { readWrite: {} } }
+  });
+  assert.equal(result.ok, true, `beginTransaction: ${result.status} ${result.text}`);
+  const data = JSON.parse(result.text);
+  return data.transaction;
+}
+
+async function getDocumentInTransaction(path, auth, transaction) {
+  const name = `projects/${PROJECT_ID}/databases/(default)/documents/${path}`;
+  const result = await rawRequest(`${DATABASE_ROOT}/documents:batchGet`, {
+    method: 'POST',
+    auth,
+    body: {
+      documents: [name],
+      transaction
+    }
+  });
+  if (!result.ok) return result;
+  const rows = JSON.parse(result.text);
+  const found = rows.find((r) => r.found);
+  return {
+    ...result,
+    document: found ? found.found : null
+  };
+}
+
 async function commitUpdate(path, auth, {
-  fields = {}, deleteFields = [], serverTimestamps = ['updatedAt']
+  fields = {}, deleteFields = [], serverTimestamps = ['updatedAt'], transaction, currentDocument
 } = {}) {
   const name = `projects/${PROJECT_ID}/databases/(default)/documents/${path}`;
   const fieldPaths = [...Object.keys(fields), ...deleteFields];
   const write = {
     update: { name, fields: encodeFields(fields) },
     ...(fieldPaths.length ? { updateMask: { fieldPaths } } : {}),
+    ...(currentDocument ? { currentDocument } : {}),
     ...(serverTimestamps.length ? {
       updateTransforms: serverTimestamps.map((fieldPath) => ({
         fieldPath,
@@ -161,7 +192,10 @@ async function commitUpdate(path, auth, {
   return rawRequest(`${DATABASE_ROOT}/documents:commit`, {
     method: 'POST',
     auth,
-    body: { writes: [write] }
+    body: {
+      ...(transaction ? { transaction } : {}),
+      writes: [write]
+    }
   });
 }
 
@@ -564,9 +598,9 @@ test('Phase 4 Stage 1 Firestore rules enforce the exact isolated client boundary
     assertAllowed(await commitUpdate(`drivers/${IDS.driverB}`, AUTH.driverB, {
       fields: { truckType: 'tochan' }
     }), 'pending truck correction');
-    assertAllowed(await commitUpdate(`drivers/${IDS.driverB}`, AUTH.driverB, {
+    assertDenied(await commitUpdate(`drivers/${IDS.driverB}`, AUTH.driverB, {
       fields: { isOnDuty: false }
-    }), 'duty toggle');
+    }), 'duty toggle directly from client is denied');
     assertAllowed(await commitUpdate(`drivers/${IDS.driverB}`, AUTH.driverB, {
       fields: { name: 'Corrected Name' }
     }), 'name correction');
@@ -577,14 +611,14 @@ test('Phase 4 Stage 1 Firestore rules enforce the exact isolated client boundary
   await t.test('stationary and moving location reports require paired request-time freshness', async () => {
     const original = geo(19.076, 72.8777);
     const changed = geo(19.08, 72.88);
-    assertAllowed(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
+    assertDenied(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
       fields: { location: original },
       serverTimestamps: ['locationUpdatedAt', 'updatedAt']
-    }), 'same coordinate with fresh request time');
-    assertAllowed(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
+    }), 'direct client location write is denied');
+    assertDenied(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
       fields: { location: changed },
       serverTimestamps: ['locationUpdatedAt', 'updatedAt']
-    }), 'changed coordinate with fresh request time');
+    }), 'direct client location write is denied');
     assertDenied(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
       fields: { location: geo(19.09, 72.89) },
       serverTimestamps: ['updatedAt']
@@ -620,6 +654,77 @@ test('Phase 4 Stage 1 Firestore rules enforce the exact isolated client boundary
       fields: { location: 'not-a-geopoint' },
       serverTimestamps: ['locationUpdatedAt', 'updatedAt']
     }), 'malformed location');
+  });
+
+  await t.test('Phase 5 Stage 3: permanent paired location heartbeat security invariants (A through I)', async () => {
+    const original = geo(19.076, 72.8777);
+    const changed = geo(19.08, 72.88);
+
+    // A. direct moving location write denied from client
+    assertDenied(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
+      fields: { location: changed },
+      serverTimestamps: ['locationUpdatedAt', 'updatedAt']
+    }), 'A: direct moving location write denied from client');
+
+    // B. direct stationary location write denied from client
+    assertDenied(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
+      fields: { location: original },
+      serverTimestamps: ['locationUpdatedAt', 'updatedAt']
+    }), 'B: direct stationary location write denied from client');
+
+    // C. location-only update denied
+    assertDenied(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
+      fields: { location: geo(19.09, 72.89) },
+      serverTimestamps: ['updatedAt']
+    }), 'C: location-only update denied');
+
+    // D. locationUpdatedAt-only + updatedAt server timestamps denied (WITHOUT location in the same write)
+    assertDenied(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
+      serverTimestamps: ['locationUpdatedAt', 'updatedAt']
+    }), 'D: locationUpdatedAt-only + updatedAt server timestamps denied without location');
+
+    assertDenied(await patchFields(`drivers/${IDS.driverA}`, AUTH.driverA, {
+      locationUpdatedAt: timestamp()
+    }), 'D: locationUpdatedAt-only patch denied without location');
+
+    // E. forged locationUpdatedAt denied
+    assertDenied(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
+      fields: {
+        location: changed,
+        locationUpdatedAt: timestamp('2020-01-01T00:00:00.000Z')
+      },
+      serverTimestamps: ['updatedAt']
+    }), 'E: forged locationUpdatedAt denied');
+
+    // F. missing updatedAt denied
+    assertDenied(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
+      fields: { location: changed },
+      serverTimestamps: ['locationUpdatedAt']
+    }), 'F: missing updatedAt denied');
+
+    // G. cross-driver paired location write denied
+    assertDenied(await commitUpdate(`drivers/${IDS.driverB}`, AUTH.driverA, {
+      fields: { location: changed },
+      serverTimestamps: ['locationUpdatedAt', 'updatedAt']
+    }), 'G: cross-driver paired location write denied');
+
+    // H. valid paired location + protected walletBalance mutation denied atomically
+    assertDenied(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
+      fields: {
+        location: changed,
+        walletBalance: 999999
+      },
+      serverTimestamps: ['locationUpdatedAt', 'updatedAt']
+    }), 'H: valid paired location + protected walletBalance mutation denied atomically');
+
+    // I. valid paired location + verificationStatus mutation denied atomically
+    assertDenied(await commitUpdate(`drivers/${IDS.driverA}`, AUTH.driverA, {
+      fields: {
+        location: changed,
+        verificationStatus: 'rejected'
+      },
+      serverTimestamps: ['locationUpdatedAt', 'updatedAt']
+    }), 'I: valid paired location + verificationStatus mutation denied atomically');
   });
 
   await t.test('usage counters also deny admin clients', async () => {
@@ -847,6 +952,80 @@ test('Phase 4 Stage 1 Firestore rules enforce the exact isolated client boundary
     assertDenied(
       await firestoreRequest('DELETE', `drivers/${IDS.driverA}`, AUTH.admin),
       'admin cannot delete driver profile'
+    );
+  });
+
+  await t.test('Phase 5 Stage 3 Section 20: server-mediated duty architecture rules tests', async () => {
+    const testUid = `rule-duty-${RUN}`;
+    const testAuth = authToken(testUid);
+    await writeAsBackend(`drivers/${testUid}`, {
+      ...driverDocument(testUid, 'approved'),
+      isOnDuty: false
+    });
+
+    // 1. Direct client mutation of isOnDuty to true is strictly denied
+    assertDenied(
+      await commitUpdate(`drivers/${testUid}`, testAuth, {
+        fields: { isOnDuty: true },
+        serverTimestamps: ['updatedAt']
+      }),
+      'direct client write to isOnDuty: true is denied'
+    );
+
+    // 2. Direct client mutation of isOnDuty to false is strictly denied
+    await writeAsBackend(`drivers/${testUid}`, {
+      ...driverDocument(testUid, 'approved'),
+      isOnDuty: true
+    });
+    assertDenied(
+      await commitUpdate(`drivers/${testUid}`, testAuth, {
+        fields: { isOnDuty: false },
+        serverTimestamps: ['updatedAt']
+      }),
+      'direct client write to isOnDuty: false is denied'
+    );
+
+    // 3. Direct client mutation of location is strictly denied
+    assertDenied(
+      await commitUpdate(`drivers/${testUid}`, testAuth, {
+        fields: { location: geo(19.0760, 72.8777) },
+        serverTimestamps: ['locationUpdatedAt', 'updatedAt']
+      }),
+      'direct client write to location is denied'
+    );
+
+    // 4. Direct client mutation of activeDutySessionId or workerReady is denied
+    assertDenied(
+      await commitUpdate(`drivers/${testUid}`, testAuth, {
+        fields: { activeDutySessionId: 'fake-session' },
+        serverTimestamps: ['updatedAt']
+      }),
+      'direct client write to activeDutySessionId is denied'
+    );
+
+    assertDenied(
+      await commitUpdate(`drivers/${testUid}`, testAuth, {
+        fields: { workerReady: true },
+        serverTimestamps: ['updatedAt']
+      }),
+      'direct client write to workerReady is denied'
+    );
+
+    // 5. Client cannot mutate activation_intents directly
+    assertDenied(
+      await firestoreRequest('PATCH', `drivers/${testUid}/activation_intents/intent-1`, testAuth, {
+        fields: encodeFields({ status: 'activated' })
+      }),
+      'client cannot write to activation_intents'
+    );
+
+    // 6. Safe client profile update (name, updatedAt) succeeds for approved driver
+    assertAllowed(
+      await commitUpdate(`drivers/${testUid}`, testAuth, {
+        fields: { name: 'Updated Driver Name' },
+        serverTimestamps: ['updatedAt']
+      }),
+      'client safe profile update succeeds'
     );
   });
 });

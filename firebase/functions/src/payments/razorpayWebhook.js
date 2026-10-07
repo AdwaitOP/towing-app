@@ -25,6 +25,7 @@ const {
   compareTimestamps,
 } = require('../dispatch/noDriverRefund');
 const { exactKeys, timestampMillis } = require('../dispatch/dispatchValidation');
+const { createWalletTopupManager } = require('../wallet/topupService');
 
 class WebhookProcessingError extends Error {
   constructor(message, code = 'WEBHOOK_PROCESSING_ERROR') {
@@ -59,8 +60,42 @@ function createRazorpayWebhook({
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
     const event = req.body?.event;
-    if (!['payment_link.paid', 'refund.processed'].includes(event)) {
+    const isTopupEvent = (event === 'order.paid' || event === 'payment.captured') &&
+      Boolean(req.body?.payload?.payment?.entity?.notes?.topupId);
+
+    if (!['payment_link.paid', 'refund.processed'].includes(event) && !isTopupEvent) {
       return res.status(200).send('Event ignored');
+    }
+
+    if (isTopupEvent) {
+      const payment = req.body?.payload?.payment?.entity;
+      const notes = payment?.notes || {};
+      const identity = `razorpay:topup:${payment.id}`;
+      const payloadHash = crypto.createHash('sha256').update(JSON.stringify({
+        driverId: notes.driverId ?? null,
+        topupId: notes.topupId,
+        orderId: payment.order_id,
+        paymentId: payment.id,
+        amountPaise: payment.amount,
+      })).digest('hex');
+      try {
+        const result = await idempotency.executeIdempotent(identity, 'razorpay_topup_webhook', async () => {
+          const topupManager = createWalletTopupManager({ db, TimestampClass, now: () => new Date(now()) });
+          return await topupManager.reconcileTopupPayment({
+            topupId: notes.topupId,
+            orderId: payment.order_id,
+            paymentId: payment.id,
+            amountPaise: payment.amount,
+            driverId: notes.driverId,
+            paymentStatus: payment.status || 'captured',
+          });
+        }, { payloadHash });
+        if (result.status !== 200) return res.status(result.status).send(result.message);
+        return res.sendStatus(200);
+      } catch (error) {
+        console.error('Razorpay topup webhook processing failed', error);
+        return res.status(500).send('Processing incomplete; retry required');
+      }
     }
 
     let parsed;

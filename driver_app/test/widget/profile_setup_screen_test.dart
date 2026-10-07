@@ -94,7 +94,7 @@ void main() {
       expect(controller.selectedTruckType, equals(TruckType.hydraulic));
     });
 
-    testWidgets('logout button in AppBar triggers signOut', (tester) async {
+    testWidgets('logout without current server authority stays signed in', (tester) async {
       await tester.pumpWidget(
         createTestWidget(
           child: ProfileSetupScreen(
@@ -110,7 +110,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.logout));
       await tester.pump();
 
-      expect(authService.signOutCalled, isTrue);
+      expect(authService.signOutCalled, isFalse);
     });
   });
 }

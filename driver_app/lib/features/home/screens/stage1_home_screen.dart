@@ -4,6 +4,7 @@ import '../../../core/services/auth_service.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_typography.dart';
+import '../../../app/logout_coordinator.dart';
 
 /// Stage 1 Authenticated Placeholder Screen.
 /// Displays driver profile summary and confirmation that Stage 1 setup is complete.
@@ -50,7 +51,7 @@ class Stage1HomeScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.error),
             tooltip: l10n.logout,
-            onPressed: () => authService.signOut(),
+            onPressed: () => AppLogoutCoordinator(authService: authService).coordinateLogout(profile: profile, context: context),
           ),
         ],
       ),
@@ -186,7 +187,7 @@ class Stage1HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 36.0),
               OutlinedButton.icon(
-                onPressed: () => authService.signOut(),
+                onPressed: () => AppLogoutCoordinator(authService: authService).coordinateLogout(profile: profile, context: context),
                 icon: const Icon(Icons.logout, color: AppColors.error),
                 label: Text(
                   l10n.logout,

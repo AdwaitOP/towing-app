@@ -3,6 +3,7 @@ import '../../../core/models/driver_profile.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_colors.dart';
+import '../../../app/logout_coordinator.dart';
 
 class KycPendingScreen extends StatelessWidget {
   final DriverProfile profile;
@@ -26,7 +27,7 @@ class KycPendingScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.error),
             tooltip: l10n.logout,
-            onPressed: () => authService.signOut(),
+            onPressed: () => AppLogoutCoordinator(authService: authService).coordinateLogout(profile: profile, context: context),
           ),
         ],
       ),
@@ -127,7 +128,7 @@ class KycPendingScreen extends StatelessWidget {
 
               // Sign Out Button
               OutlinedButton.icon(
-                onPressed: () => authService.signOut(),
+                onPressed: () => AppLogoutCoordinator(authService: authService).coordinateLogout(profile: profile, context: context),
                 icon: const Icon(Icons.logout, color: AppColors.error),
                 label: Text(l10n.logout, style: const TextStyle(color: AppColors.error)),
                 style: OutlinedButton.styleFrom(

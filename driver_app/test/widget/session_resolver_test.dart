@@ -6,6 +6,7 @@ import 'package:driver_app/core/models/driver_profile.dart';
 import 'package:driver_app/core/models/truck_type.dart';
 import 'package:driver_app/core/services/auth_service.dart';
 import 'package:driver_app/core/services/profile_service.dart';
+import 'package:driver_app/features/job/screens/active_job_screen.dart';
 import 'package:driver_app/features/profile/screens/profile_setup_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +26,9 @@ class FakeUser implements User {
 class MockAuthService extends AuthService {
   User? mockUser;
   bool signOutCalled = false;
+
+  @override
+  User? get currentUser => mockUser;
 
   @override
   Stream<User?> get authStateChanges => Stream.value(mockUser);
@@ -119,6 +123,34 @@ void main() {
 
       expect(find.text('Driver app setup complete'), findsOneWidget);
       expect(find.text('Suresh Raina'), findsOneWidget);
+    });
+
+    testWidgets('approved profile with activeJobId routes to ActiveJobScreen', (tester) async {
+      const activeJobProfile = DriverProfile(
+        uid: 'test_driver_1',
+        name: 'Suresh Raina',
+        phone: '+919876543210',
+        truckType: TruckType.hydraulic,
+        vehicleNumber: 'MH 14 CC 1234',
+        isOnDuty: true,
+        verificationStatus: 'approved',
+        activeJobId: 'job_active_777',
+      );
+      final profileService = MockProfileService(const ProfileCompleted(activeJobProfile));
+
+      await tester.pumpWidget(
+        createTestWidget(
+          child: SessionResolver(
+            authService: authService,
+            profileService: profileService,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(ActiveJobScreen), findsOneWidget);
+      expect(find.text('job_active_777'), findsOneWidget);
     });
 
     testWidgets('stream error routes to explicit retry error screen', (tester) async {
@@ -285,7 +317,7 @@ void main() {
       await streamController.close();
     });
 
-    testWidgets('tapping Logout from ProfileErrorScreen invokes authService.signOut', (tester) async {
+    testWidgets('tapping Logout without fresh server authority stays signed in', (tester) async {
       final profileService = MockProfileService(ProfileError(Exception('Network error')));
 
       await tester.pumpWidget(
@@ -305,7 +337,7 @@ void main() {
       await tester.tap(find.text('Logout'));
       await tester.pump();
 
-      expect(authService.signOutCalled, isTrue);
+      expect(authService.signOutCalled, isFalse);
     });
 
     testWidgets('malformed profile routes to fail-closed error screen without setup overwrite option', (tester) async {

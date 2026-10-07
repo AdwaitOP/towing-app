@@ -115,12 +115,32 @@ function createOtpService({
       throw new OtpError('Please wait before requesting another OTP', 429, 'OTP_RESEND_COOLDOWN');
     }
 
-    try {
-      await whatsapp.sendAuthenticationTemplate(phone, otp, outcome.template);
-    } catch (error) {
-      const wrapped = new OtpError('Failed to send OTP via WhatsApp', 503, 'OTP_DELIVERY_FAILED');
-      wrapped.cause = error;
-      throw wrapped;
+    const isEmulatorEnv = env.FUNCTIONS_EMULATOR === 'true' || Boolean(env.FIREBASE_EMULATOR_HUB);
+    const isLocalOtpTestMode = env.LOCAL_OTP_TEST_MODE === 'true';
+
+    if (isEmulatorEnv && isLocalOtpTestMode) {
+      console.log(`[LOCAL_OTP_TEST_TRANSPORT] OTP for ${phone}: ${otp} (challengeId: ${challengeId})`);
+      if (typeof env.LOCAL_OTP_RECEIVER_HOOK === 'function') {
+        env.LOCAL_OTP_RECEIVER_HOOK({ phone, otp, challengeId });
+      }
+      try {
+        await db.collection('emulator_otp_inbox').doc(phone).set({
+          phone,
+          otp,
+          challengeId,
+          createdAt: TimestampClass.fromMillis(now()),
+        });
+      } catch {
+        // Non-blocking in case emulator collection is restricted
+      }
+    } else {
+      try {
+        await whatsapp.sendAuthenticationTemplate(phone, otp, outcome.template);
+      } catch (error) {
+        const wrapped = new OtpError('Failed to send OTP via WhatsApp', 503, 'OTP_DELIVERY_FAILED');
+        wrapped.cause = error;
+        throw wrapped;
+      }
     }
     return { challengeId };
   }

@@ -5,6 +5,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_colors.dart';
 import '../controllers/kyc_controller.dart';
 import 'kyc_consent_screen.dart';
+import '../../../app/logout_coordinator.dart';
 
 class KycRejectedScreen extends StatelessWidget {
   final DriverProfile profile;
@@ -51,7 +52,7 @@ class KycRejectedScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.error),
             tooltip: l10n.logout,
-            onPressed: () => authService.signOut(),
+            onPressed: () => AppLogoutCoordinator(authService: authService).coordinateLogout(profile: profile, context: context),
           ),
         ],
       ),
@@ -156,7 +157,7 @@ class KycRejectedScreen extends StatelessWidget {
 
               // Sign Out Button
               OutlinedButton.icon(
-                onPressed: () => authService.signOut(),
+                onPressed: () => AppLogoutCoordinator(authService: authService).coordinateLogout(profile: profile, context: context),
                 icon: const Icon(Icons.logout, color: AppColors.error),
                 label: Text(l10n.logout, style: const TextStyle(color: AppColors.error)),
                 style: OutlinedButton.styleFrom(

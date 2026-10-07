@@ -6,6 +6,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_typography.dart';
 import '../controllers/profile_controller.dart';
+import '../../../app/logout_coordinator.dart';
 
 /// Screen displayed when an authenticated driver has not yet created their `drivers/{uid}` profile.
 class ProfileSetupScreen extends StatefulWidget {
@@ -67,7 +68,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.error),
             tooltip: l10n.logout,
-            onPressed: () => widget.authService.signOut(),
+            onPressed: () => AppLogoutCoordinator(authService: widget.authService).coordinateLogout(context: context),
           ),
         ],
       ),

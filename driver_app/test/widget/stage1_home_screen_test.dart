@@ -88,7 +88,7 @@ void main() {
       expect(find.text('ड्रायव्हर ॲप सेटअप पूर्ण झाले'), findsOneWidget);
     });
 
-    testWidgets('logout button invokes authService.signOut()', (tester) async {
+    testWidgets('logout without fresh server authority stays signed in', (tester) async {
       final authService = MockAuthService();
 
       await tester.pumpWidget(
@@ -105,7 +105,7 @@ void main() {
       await tester.tap(find.byType(IconButton));
       await tester.pumpAndSettle();
 
-      expect(authService.signOutCalled, isTrue);
+      expect(authService.signOutCalled, isFalse);
     });
   });
 }

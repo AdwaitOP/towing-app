@@ -1,9 +1,13 @@
+import 'package:flutter/foundation.dart';
+
 class AppConfig {
   /// Whether to connect to local Firebase emulators (Auth, Firestore, Functions).
-  /// Must be explicitly enabled via `--dart-define=USE_FIREBASE_EMULATOR=true`.
+  /// In debug mode (`kDebugMode`), defaults to true so normal debug APKs run without requiring compile-time flags.
+  /// In release mode (`kReleaseMode`), defaults to false (production mode) and fails closed if credentials are absent.
+  /// Can be explicitly overridden via `--dart-define=USE_FIREBASE_EMULATOR=true|false`.
   static const bool useFirebaseEmulator = bool.fromEnvironment(
     'USE_FIREBASE_EMULATOR',
-    defaultValue: false,
+    defaultValue: kDebugMode,
   );
 
   /// Emulator host address (10.0.2.2 for Android emulator, localhost for desktop/tests).
@@ -63,4 +67,16 @@ class AppConfig {
 
   /// Timeout for HTTP requests to Cloud Functions.
   static const Duration requestTimeout = Duration(seconds: 15);
+
+  /// Public Mapbox access token for client map visualization.
+  /// Configured via `--dart-define=MAPBOX_ACCESS_TOKEN=pk.xxx`.
+  /// If empty, map view degrades gracefully to offline placeholder.
+  static const String mapboxPublicAccessToken = String.fromEnvironment(
+    'MAPBOX_ACCESS_TOKEN',
+    defaultValue: '',
+  );
+
+  /// Conservative heartbeat cadence (45 seconds) to ensure stationary and moving
+  /// drivers stay comfortably within the 120-second backend dispatch freshness window.
+  static const Duration locationHeartbeatInterval = Duration(seconds: 45);
 }

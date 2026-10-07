@@ -347,3 +347,66 @@ test('custom-token failure after verification leaves the challenge consumed and 
   assert.equal(record.verifiedUid, 'driver-1');
   await assert.rejects(setup.service.verifyDriverOtp(phone, '123456'), /already consumed/);
 });
+
+test('production/non-emulator environment refuses to activate test transport even with LOCAL_OTP_TEST_MODE enabled', async () => {
+  let hookCalled = false;
+  const setup = harness();
+  // Service created in production env (no FUNCTIONS_EMULATOR or FIREBASE_EMULATOR_HUB)
+  const prodService = createOtpService({
+    db: setup.db,
+    auth: { getUserByPhoneNumber: async () => ({ uid: 'driver-1' }) },
+    TimestampClass: FakeTimestamp,
+    now: () => 1_000_000,
+    env: {
+      OTP_PEPPER: 'secret-pepper',
+      LOCAL_OTP_TEST_MODE: 'true', // Flag set, but NOT in emulator
+      LOCAL_OTP_RECEIVER_HOOK: () => { hookCalled = true; },
+    },
+    cryptoOps: {
+      generateOtp: () => '654321',
+      hashOtp: async () => ({ hash: 'a'.repeat(128), salt: 'b'.repeat(32) }),
+      verifyOtp: async () => true,
+    },
+    whatsapp: setup.whatsapp,
+    randomUUID: () => 'test-challenge-prod',
+  });
+
+  await prodService.sendDriverOtp(phone);
+  assert.equal(hookCalled, false, 'Test hook MUST NOT be called in production environment');
+  assert.equal(setup.calls.sends.length, 1, 'Production WhatsApp sender MUST be called');
+  assert.equal(setup.db.read('emulator_otp_inbox', phone), undefined, 'No emulator inbox write in production');
+});
+
+test('Functions Emulator with explicit LOCAL_OTP_TEST_MODE activates test transport and bypasses WhatsApp', async () => {
+  let capturedPayload = null;
+  const setup = harness();
+  const emuService = createOtpService({
+    db: setup.db,
+    auth: { getUserByPhoneNumber: async () => ({ uid: 'driver-1' }) },
+    TimestampClass: FakeTimestamp,
+    now: () => 1_000_000,
+    env: {
+      OTP_PEPPER: 'secret-pepper',
+      FUNCTIONS_EMULATOR: 'true',
+      LOCAL_OTP_TEST_MODE: 'true',
+      LOCAL_OTP_RECEIVER_HOOK: (payload) => { capturedPayload = payload; },
+    },
+    cryptoOps: {
+      generateOtp: () => '998877',
+      hashOtp: async () => ({ hash: 'a'.repeat(128), salt: 'b'.repeat(32) }),
+      verifyOtp: async () => true,
+    },
+    whatsapp: setup.whatsapp,
+    randomUUID: () => 'test-challenge-emu',
+  });
+
+  const res = await emuService.sendDriverOtp(phone);
+  assert.equal(res.challengeId, 'test-challenge-emu');
+  assert.equal(setup.calls.sends.length, 0, 'Production WhatsApp sender MUST NOT be called in emulator test transport');
+  assert.ok(capturedPayload, 'Test hook MUST receive OTP payload');
+  assert.equal(capturedPayload.otp, '998877');
+  assert.equal(capturedPayload.phone, phone);
+  const inboxDoc = setup.db.read('emulator_otp_inbox', phone);
+  assert.ok(inboxDoc, 'Emulator inbox document must be created');
+  assert.equal(inboxDoc.otp, '998877');
+});

@@ -16,6 +16,13 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
+    project.plugins.withId("com.android.library") {
+        if (project.name == "mapbox_maps_flutter" && !project.plugins.hasPlugin("org.jetbrains.kotlin.android")) {
+            project.plugins.apply("org.jetbrains.kotlin.android")
+        }
+    }
+}
+subprojects {
     project.evaluationDependsOn(":app")
 }
 

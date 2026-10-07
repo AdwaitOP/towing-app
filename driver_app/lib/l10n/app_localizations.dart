@@ -657,6 +657,588 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Network error. Please check your connection and try again.'**
   String get kycNetworkError;
+
+  /// Title of the dispatch hub screen
+  ///
+  /// In en, this message translates to:
+  /// **'Dispatch Hub'**
+  String get dispatchHub;
+
+  /// Label for ON DUTY status
+  ///
+  /// In en, this message translates to:
+  /// **'ON DUTY'**
+  String get onDuty;
+
+  /// Label for OFF DUTY status
+  ///
+  /// In en, this message translates to:
+  /// **'OFF DUTY'**
+  String get offDuty;
+
+  /// Button label to transition to ON DUTY
+  ///
+  /// In en, this message translates to:
+  /// **'GO ON DUTY'**
+  String get goOnDuty;
+
+  /// Button label to transition to OFF DUTY
+  ///
+  /// In en, this message translates to:
+  /// **'GO OFF DUTY'**
+  String get goOffDuty;
+
+  /// Detailed status when driver is on duty
+  ///
+  /// In en, this message translates to:
+  /// **'You are ON DUTY and available for towing requests.'**
+  String get hubStatusOnDuty;
+
+  /// Detailed status when driver is off duty
+  ///
+  /// In en, this message translates to:
+  /// **'You are OFF DUTY. Go ON DUTY to receive dispatches.'**
+  String get hubStatusOffDuty;
+
+  /// Title for background location disclosure dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Location Access & Dispatch'**
+  String get locationDisclosureTitle;
+
+  /// Body text explaining background location collection
+  ///
+  /// In en, this message translates to:
+  /// **'Towing Driver collects location data to find nearby towing jobs, calculate routes, and update your position while ON DUTY. This location tracking continues even when the app is in the background or closed while you are ON DUTY.'**
+  String get locationDisclosureBody;
+
+  /// Continue button label
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continueAction;
+
+  /// Not now button label
+  ///
+  /// In en, this message translates to:
+  /// **'Not Now'**
+  String get notNowAction;
+
+  /// Cancel button label
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get cancelAction;
+
+  /// Error message when location permission is not granted
+  ///
+  /// In en, this message translates to:
+  /// **'Location permission is required to go ON DUTY.'**
+  String get locationPermissionRequired;
+
+  /// Error message when location permission is permanently denied
+  ///
+  /// In en, this message translates to:
+  /// **'Location permission is permanently denied. Please enable it in Settings to go ON DUTY.'**
+  String get locationPermissionPermanentlyDenied;
+
+  /// Error message when device location services are disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Location services are turned off. Please enable GPS/Location in Settings.'**
+  String get locationServicesDisabled;
+
+  /// Error message when background location permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Background location permission is required to receive dispatches while navigating.'**
+  String get backgroundLocationRequired;
+
+  /// Error message when notification permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission is required to run the foreground dispatch service.'**
+  String get notificationPermissionRequired;
+
+  /// Button label to open system settings
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings'**
+  String get openSettings;
+
+  /// Indicator text when location tracking is active
+  ///
+  /// In en, this message translates to:
+  /// **'Location Tracking Active'**
+  String get trackingActive;
+
+  /// Indicator text when location tracking cannot run
+  ///
+  /// In en, this message translates to:
+  /// **'Location Tracking Unavailable'**
+  String get trackingUnavailable;
+
+  /// Banner message when driver is temporarily banned
+  ///
+  /// In en, this message translates to:
+  /// **'You are temporarily paused until {time} due to cancellations.'**
+  String temporaryBanBanner(String time);
+
+  /// Error message preventing off duty transition during active job
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot go off duty while on an active job.'**
+  String get cannotGoOffDutyActiveJob;
+
+  /// Error message when duty state reconciliation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to reconcile duty state. Please check your connection or restart the app.'**
+  String get reconciliationFailed;
+
+  /// Title for battery optimization card
+  ///
+  /// In en, this message translates to:
+  /// **'Battery Optimization'**
+  String get batteryOptimizationTitle;
+
+  /// Subtitle explaining battery optimization impact
+  ///
+  /// In en, this message translates to:
+  /// **'For reliable background tracking, ensure battery optimization is set to Unrestricted.'**
+  String get batteryOptimizationSubtitle;
+
+  /// Button to open battery optimization settings
+  ///
+  /// In en, this message translates to:
+  /// **'Battery Settings'**
+  String get batteryOptimizationAction;
+
+  /// Foreground service notification title
+  ///
+  /// In en, this message translates to:
+  /// **'Towing Driver'**
+  String get foregroundNotificationTitle;
+
+  /// Foreground service notification content
+  ///
+  /// In en, this message translates to:
+  /// **'Sharing live location for dispatch'**
+  String get foregroundNotificationText;
+
+  /// Placeholder text when map fails or is disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Map preview is currently unavailable.'**
+  String get mapUnavailable;
+
+  /// Placeholder subtitle when mapbox token is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Mapbox access token is not configured.'**
+  String get mapTokenMissing;
+
+  /// Loading indicator text during duty state transition
+  ///
+  /// In en, this message translates to:
+  /// **'Updating duty status...'**
+  String get dutyTransitionInProgress;
+
+  /// Error message when foreground service startup fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start location service. Please try again.'**
+  String get dutyServiceStartupFailed;
+
+  /// Notice when on duty in Firestore but location tracking is unavailable
+  ///
+  /// In en, this message translates to:
+  /// **'Duty status needs attention — live location unavailable'**
+  String get dutyAttentionRequired;
+
+  /// Error message when logout is blocked by an active job
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot log out while an active job is assigned.'**
+  String get logoutBlockedActiveJob;
+
+  /// Error message when logout is blocked by a pending offer
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot log out while a job offer is pending.'**
+  String get logoutBlockedActiveOffer;
+
+  /// Error message when duty deactivation fails during logout
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to end duty session safely. Please try again.'**
+  String get logoutFailedDutyTransition;
+
+  /// Title of the incoming job offer sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Incoming Job Offer'**
+  String get incomingOfferTitle;
+
+  /// Badge text when the offer has expired
+  ///
+  /// In en, this message translates to:
+  /// **'EXPIRED'**
+  String get offerExpired;
+
+  /// Countdown timer badge for expiring offer
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds}s remaining'**
+  String offerExpiringIn(int seconds);
+
+  /// Truthful warning banner when wallet balance is insufficient for offer commission
+  ///
+  /// In en, this message translates to:
+  /// **'Insufficient wallet balance. Deposit ₹{commission} to accept this offer.'**
+  String insufficientWalletForOffer(String commission);
+
+  /// Label for pickup coordinates or address
+  ///
+  /// In en, this message translates to:
+  /// **'Pickup Location'**
+  String get pickupLocation;
+
+  /// Label for destination coordinates or address
+  ///
+  /// In en, this message translates to:
+  /// **'Destination'**
+  String get destinationLocation;
+
+  /// Label for distance to pickup
+  ///
+  /// In en, this message translates to:
+  /// **'Distance'**
+  String get pickupDistance;
+
+  /// Label for estimated time of arrival to pickup
+  ///
+  /// In en, this message translates to:
+  /// **'ETA'**
+  String get pickupEta;
+
+  /// Label for requested truck type
+  ///
+  /// In en, this message translates to:
+  /// **'Truck Type'**
+  String get truckTypeLabel;
+
+  /// Label for estimated gross tow fare
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated Fare'**
+  String get estimatedEarnings;
+
+  /// Label for platform commission deduction
+  ///
+  /// In en, this message translates to:
+  /// **'Platform Fee'**
+  String get commissionFee;
+
+  /// Button to decline incoming job offer
+  ///
+  /// In en, this message translates to:
+  /// **'DECLINE'**
+  String get declineOffer;
+
+  /// Button to accept incoming job offer
+  ///
+  /// In en, this message translates to:
+  /// **'ACCEPT JOB'**
+  String get acceptOffer;
+
+  /// Button label to retry accept with preserved requestId after network timeout
+  ///
+  /// In en, this message translates to:
+  /// **'RETRY ACCEPT'**
+  String get retryAcceptOffer;
+
+  /// Title of active job screen
+  ///
+  /// In en, this message translates to:
+  /// **'Active Job'**
+  String get activeJobTitle;
+
+  /// Status badge for newly assigned active job
+  ///
+  /// In en, this message translates to:
+  /// **'ASSIGNED'**
+  String get activeJobStatusAssigned;
+
+  /// Label for job ID identifier
+  ///
+  /// In en, this message translates to:
+  /// **'Job ID'**
+  String get jobIdLabel;
+
+  /// Heading for route details card
+  ///
+  /// In en, this message translates to:
+  /// **'Route Details'**
+  String get routeDetailsTitle;
+
+  /// Heading for payment summary card
+  ///
+  /// In en, this message translates to:
+  /// **'Fare & Commission'**
+  String get paymentSummaryTitle;
+
+  /// Heading for cancellation policy card
+  ///
+  /// In en, this message translates to:
+  /// **'Cancellation Policy'**
+  String get cancellationPolicyTitle;
+
+  /// Description of cancellation policy snapshot
+  ///
+  /// In en, this message translates to:
+  /// **'You have {freeCount} free cancellation(s) this month. Late cancellations may incur penalties.'**
+  String cancellationPolicyDescription(String freeCount);
+
+  /// Notice explaining Batch 1 presentation state on active job screen
+  ///
+  /// In en, this message translates to:
+  /// **'Batch 1 presentation shell: State tracking active. Action buttons (Start Tow, Complete, Cancel) will activate in Batch 2.'**
+  String get activeJobBatchNotice;
+
+  /// Label for driver wallet balance
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet Balance'**
+  String get walletBalance;
+
+  /// Button label to top up wallet balance
+  ///
+  /// In en, this message translates to:
+  /// **'Top Up'**
+  String get walletTopup;
+
+  /// Title of wallet top-up sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet Top-Up'**
+  String get walletTopupTitle;
+
+  /// Label for custom top-up amount text field
+  ///
+  /// In en, this message translates to:
+  /// **'Enter Amount'**
+  String get enterTopupAmount;
+
+  /// Label for quick select top-up preset chips
+  ///
+  /// In en, this message translates to:
+  /// **'Quick Select'**
+  String get topupQuickAmount;
+
+  /// Button to submit wallet top-up
+  ///
+  /// In en, this message translates to:
+  /// **'Top Up Wallet'**
+  String get topupSubmit;
+
+  /// Success message after wallet balance is credited
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet top-up initiated (₹{amount}). Balance will update once confirmed.'**
+  String topupSuccess(String amount);
+
+  /// Error message when wallet top-up fails
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet top-up failed: {error}'**
+  String topupFailed(String error);
+
+  /// Validation error for top-up amount out of range
+  ///
+  /// In en, this message translates to:
+  /// **'Amount must be between ₹1 and ₹1,00,000'**
+  String get topupMinMaxError;
+
+  /// Informational banner when wallet balance is low
+  ///
+  /// In en, this message translates to:
+  /// **'Low wallet balance: {balance}. Top up to accept high-commission jobs.'**
+  String lowBalanceWarning(String balance);
+
+  /// Badge indicating driver account is under strict cancellation monitoring
+  ///
+  /// In en, this message translates to:
+  /// **'Strict Mode Active'**
+  String get strictModeActive;
+
+  /// Warning in cancellation preview when strict mode is active
+  ///
+  /// In en, this message translates to:
+  /// **'Strict Mode Active: Next cancellation incurs 100% penalty and account suspension.'**
+  String get strictModeWarning;
+
+  /// Display count of cancellations in current month
+  ///
+  /// In en, this message translates to:
+  /// **'Cancellations this month: {count}'**
+  String monthlyCancellations(String count);
+
+  /// Action button to start towing the customer vehicle
+  ///
+  /// In en, this message translates to:
+  /// **'START TOW'**
+  String get startTow;
+
+  /// Action button to mark an in-progress tow complete
+  ///
+  /// In en, this message translates to:
+  /// **'MARK COMPLETE'**
+  String get markComplete;
+
+  /// Action button for driver to cancel an accepted job
+  ///
+  /// In en, this message translates to:
+  /// **'CANCEL JOB'**
+  String get cancelJob;
+
+  /// Success message displayed when job completes
+  ///
+  /// In en, this message translates to:
+  /// **'Job Completed Successfully'**
+  String get jobCompletedSuccess;
+
+  /// Button to return to dispatch hub after job completion
+  ///
+  /// In en, this message translates to:
+  /// **'RETURN TO HUB'**
+  String get returnToHub;
+
+  /// Notice when customer cancels an assigned job
+  ///
+  /// In en, this message translates to:
+  /// **'Customer cancellation is in progress. No driver penalty applied. Your wallet balance will update once confirmed.'**
+  String get customerCancelledNotice;
+
+  /// Title of cancellation preview modal
+  ///
+  /// In en, this message translates to:
+  /// **'Cancellation Preview'**
+  String get cancellationPreviewTitle;
+
+  /// Disclaimer indicating preview calculation is non-authoritative
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated preview. The backend server is the sole financial authority.'**
+  String get cancellationPreviewNotice;
+
+  /// Count of free cancellations remaining this month
+  ///
+  /// In en, this message translates to:
+  /// **'Free cancellations remaining: {count}'**
+  String freeCancellationsRemaining(String count);
+
+  /// Estimated forfeiture amount displayed in preview
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated Forfeiture: ₹{amount}'**
+  String estimatedDeduction(String amount);
+
+  /// Estimated refund amount displayed in preview
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated Refund: ₹{amount}'**
+  String estimatedRefund(String amount);
+
+  /// Warning in preview when cancellation threshold will be exceeded
+  ///
+  /// In en, this message translates to:
+  /// **'Warning: Cancelling will temporarily suspend your account from duty.'**
+  String get banWarning;
+
+  /// Button to confirm driver cancellation
+  ///
+  /// In en, this message translates to:
+  /// **'CONFIRM CANCELLATION'**
+  String get confirmCancellation;
+
+  /// Button to dismiss cancellation modal and keep job
+  ///
+  /// In en, this message translates to:
+  /// **'KEEP JOB'**
+  String get keepJob;
+
+  /// Status text while action request is in flight
+  ///
+  /// In en, this message translates to:
+  /// **'Please wait...'**
+  String get actionInProgress;
+
+  /// Notice that driver cannot cancel after starting tow
+  ///
+  /// In en, this message translates to:
+  /// **'Cancellation is not permitted once tow is in progress.'**
+  String get cancelUnavailableInProgress;
+
+  /// Notice that wallet top-up operates in test mode
+  ///
+  /// In en, this message translates to:
+  /// **'Test Mode: Simulates instant payment without real money.'**
+  String get testModeNotice;
+
+  /// Button to open external map navigation to customer pickup location
+  ///
+  /// In en, this message translates to:
+  /// **'NAVIGATE TO PICKUP'**
+  String get navigateToPickup;
+
+  /// Button to open external map navigation to job drop-off destination
+  ///
+  /// In en, this message translates to:
+  /// **'NAVIGATE TO DESTINATION'**
+  String get navigateToDestination;
+
+  /// Error message when external map app fails to open
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to launch external navigation map.'**
+  String get navigationLaunchError;
+
+  /// Status badge when tow is in progress
+  ///
+  /// In en, this message translates to:
+  /// **'IN PROGRESS'**
+  String get activeJobStatusInProgress;
+
+  /// Status badge when job has completed
+  ///
+  /// In en, this message translates to:
+  /// **'COMPLETED'**
+  String get activeJobStatusCompleted;
+
+  /// Status badge when job has been cancelled
+  ///
+  /// In en, this message translates to:
+  /// **'CANCELLED'**
+  String get activeJobStatusCancelled;
+
+  /// Notice shown when driver successfully cancels an accepted job
+  ///
+  /// In en, this message translates to:
+  /// **'Job cancelled. Refund: ₹{refund}, Forfeited: ₹{forfeited}'**
+  String jobCancelledNotice(String refund, String forfeited);
+
+  /// Button to retry cancellation with same request ID
+  ///
+  /// In en, this message translates to:
+  /// **'RETRY CANCEL'**
+  String get retryCancel;
+
+  /// Button to retry wallet top-up with same request ID
+  ///
+  /// In en, this message translates to:
+  /// **'RETRY TOP-UP'**
+  String get retryTopup;
 }
 
 class _AppLocalizationsDelegate

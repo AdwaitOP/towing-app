@@ -31,7 +31,7 @@ function createIdempotencyService({
   if (!db || typeof db.runTransaction !== 'function') throw new TypeError('Firestore is required');
   if (!Number.isSafeInteger(leaseMs) || leaseMs <= 0) throw new TypeError('leaseMs must be positive');
 
-  async function claimLease(identity, type) {
+  async function claimLease(identity, type, { payloadHash = null } = {}) {
     assertIdentity(identity, type);
     const ownerToken = randomUUID();
     const ref = db.collection('processed_requests').doc(identity);
@@ -42,6 +42,9 @@ function createIdempotencyService({
         const data = snapshot.data();
         if (data.type !== type) {
           throw new IdempotencyError('Idempotency identity was used for another request type', 409);
+        }
+        if (payloadHash !== null && data.payloadHash !== payloadHash) {
+          throw new IdempotencyError('Idempotency payload binding does not match', 409, 'PAYLOAD_BINDING_CONFLICT');
         }
         if (data.status === 'completed') {
           if (!data.processedAt) {
@@ -68,6 +71,7 @@ function createIdempotencyService({
         ownerToken,
         claimedAt,
         leaseUntil: TimestampClass.fromMillis(nowMs + leaseMs),
+        ...(payloadHash !== null ? { payloadHash } : {}),
       });
       return { completed: false, ownerToken };
     });
@@ -114,10 +118,10 @@ function createIdempotencyService({
     return data;
   }
 
-  async function executeIdempotent(identity, type, operationFn) {
+  async function executeIdempotent(identity, type, operationFn, options = {}) {
     let claim;
     try {
-      claim = await claimLease(identity, type);
+      claim = await claimLease(identity, type, options);
     } catch (error) {
       if (error instanceof IdempotencyError) {
         return { status: error.status, message: error.message, completed: false };

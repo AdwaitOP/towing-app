@@ -161,6 +161,9 @@ function driverEligibility(driver, job, policy, nowMs) {
       driver.walletBalance < job.driverCommissionPaise || timestampMillis(driver.bannedUntil) > nowMs) {
     return 'driver_ineligible';
   }
+  if (driver.workerReady !== true) {
+    return 'driver_not_ready';
+  }
   if (nowMs - timestampMillis(driver.locationUpdatedAt) > policy.locationFreshnessSeconds * 1000) {
     return 'driver_location_stale';
   }
@@ -200,7 +203,7 @@ function validateRun(run, job, jobId, runId) {
     if (i >= run.nextCandidateIndex ? c.outcome !== 'pending' :
       !['declined', 'expired', 'driver_cancelled', 'skipped'].includes(c.outcome)) fail();
     if (['declined', 'expired', 'driver_cancelled'].includes(c.outcome)) attempted.push(c.driverId);
-    if (c.outcome === 'skipped' && !['driver_ineligible', 'driver_location_stale', 'driver_outside_radius'].includes(c.reasonCode)) fail();
+    if (c.outcome === 'skipped' && !['driver_ineligible', 'driver_location_stale', 'driver_outside_radius', 'driver_not_ready'].includes(c.reasonCode)) fail();
   }
   for (const list of [run.attemptedDriverIds, run.excludedDriverIds]) {
     if (!Array.isArray(list) || list.length > 30 || new Set(list).size !== list.length || list.some(id => !ids.has(id))) fail();
@@ -274,7 +277,7 @@ function validateActiveOfferRun(run, job, offer, jobId, offerId, dispatchGenerat
         throw new DispatchError('RUN_INVALID');
       }
       if (c.outcome === 'skipped') {
-        if (!['driver_ineligible', 'driver_location_stale', 'driver_outside_radius'].includes(c.reasonCode)) {
+        if (!['driver_ineligible', 'driver_location_stale', 'driver_outside_radius', 'driver_not_ready'].includes(c.reasonCode)) {
           throw new DispatchError('RUN_INVALID');
         }
       } else {
@@ -404,7 +407,7 @@ function validateCanonicalAssignedRun({ run, job, offer, jobId, offerId, driverU
         throw new DispatchError('RUN_INVALID');
       }
       if (c.outcome === 'skipped') {
-        if (!['driver_ineligible', 'driver_location_stale', 'driver_outside_radius'].includes(c.reasonCode)) {
+        if (!['driver_ineligible', 'driver_location_stale', 'driver_outside_radius', 'driver_not_ready'].includes(c.reasonCode)) {
           throw new DispatchError('RUN_INVALID');
         }
       } else {
