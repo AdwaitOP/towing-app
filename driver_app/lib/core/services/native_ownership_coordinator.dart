@@ -154,7 +154,7 @@ class BootstrapCleanupException implements Exception {
 /// Strictly fails closed in production when the native channel is unavailable.
 class NativeOwnershipCoordinator {
   static const MethodChannel channel = MethodChannel(
-    'com.towingapp.driver_app/native_ownership_coordinator',
+    'com.towmitra.driver/native_ownership_coordinator',
   );
   static const String durableOwnerKey = 'durable_duty_owner_record';
 

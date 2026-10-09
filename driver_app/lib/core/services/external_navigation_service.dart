@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 /// (e.g. Google Maps or native geo intent handler) for pickup and destination coordinates.
 class ExternalNavigationService {
   static const MethodChannel _channel =
-      MethodChannel('com.towingapp.driver_app/external_navigation');
+      MethodChannel('com.towmitra.driver/external_navigation');
 
   /// Launches external map application to navigate to [lat], [lng] with optional [label].
   /// Returns `true` if an external activity successfully accepted the intent.

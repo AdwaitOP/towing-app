@@ -1,4 +1,4 @@
-package com.towingapp.driver_app
+package com.towmitra.driver
 
 import com.pravera.flutter_foreground_task.FlutterForegroundTaskLifecycleListener
 import com.pravera.flutter_foreground_task.FlutterForegroundTaskPlugin

@@ -1,4 +1,4 @@
-package com.towingapp.driver_app
+package com.towmitra.driver
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -53,7 +53,7 @@ class SingleReplyResult(private val delegate: MethodChannel.Result) : MethodChan
 }
 
 object NativeOwnershipCoordinator : MethodChannel.MethodCallHandler {
-    const val CHANNEL = "com.towingapp.driver_app/native_ownership_coordinator"
+    const val CHANNEL = "com.towmitra.driver/native_ownership_coordinator"
     const val PREFS_NAME = "towing_duty_ownership"
     const val KEY_OWNER_RECORD = "durable_duty_owner_record"
     const val KEY_WORKER_PAYLOAD = "duty_worker_payload"

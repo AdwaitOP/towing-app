@@ -1,4 +1,4 @@
-package com.towingapp.driver_app
+package com.towmitra.driver
 
 import android.content.Context
 import io.flutter.plugin.common.MethodCall

@@ -1,4 +1,4 @@
-package com.towingapp.driver_app
+package com.towmitra.driver
 
 import android.content.Context
 import android.content.Intent
@@ -112,7 +112,7 @@ class NativeOwnershipCoordinatorTest {
             }
         }
 
-        override fun getPackageName(): String = "com.towingapp.driver_app"
+        override fun getPackageName(): String = "com.towmitra.driver"
     }
 
     class MockMethodResult : MethodChannel.Result {

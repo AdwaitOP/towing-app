@@ -1,4 +1,4 @@
-package com.towingapp.driver_app
+package com.towmitra.driver
 
 import android.content.Intent
 import android.net.Uri
@@ -8,7 +8,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     companion object {
-        private const val NAVIGATION_CHANNEL = "com.towingapp.driver_app/external_navigation"
+        private const val NAVIGATION_CHANNEL = "com.towmitra.driver/external_navigation"
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
