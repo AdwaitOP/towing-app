@@ -1,4 +1,4 @@
-package com.towingapp.driver_app
+package com.towmitra.driver
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -460,10 +460,10 @@ class ServiceTaskBinding(
 class DutyForegroundService : Service() {
 
     companion object {
-        const val ACTION_START = "com.towingapp.driver_app.ACTION_START"
-        const val ACTION_STOP = "com.towingapp.driver_app.ACTION_STOP"
-        const val ACTION_UPDATE = "com.towingapp.driver_app.ACTION_UPDATE"
-        const val ACTION_RESTART = "com.towingapp.driver_app.ACTION_RESTART"
+        const val ACTION_START = "com.towmitra.driver.ACTION_START"
+        const val ACTION_STOP = "com.towmitra.driver.ACTION_STOP"
+        const val ACTION_UPDATE = "com.towmitra.driver.ACTION_UPDATE"
+        const val ACTION_RESTART = "com.towmitra.driver.ACTION_RESTART"
 
         const val EXTRA_UID = "extra_uid"
         const val EXTRA_SESSION_ID = "extra_session_id"

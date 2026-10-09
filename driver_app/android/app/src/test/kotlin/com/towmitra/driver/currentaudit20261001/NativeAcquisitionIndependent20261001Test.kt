@@ -1,11 +1,11 @@
-package com.towingapp.driver_app.currentaudit20261001
+package com.towmitra.driver.currentaudit20261001
 
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
-import com.towingapp.driver_app.DutyForegroundService
-import com.towingapp.driver_app.NativeOwnershipCoordinator
-import com.towingapp.driver_app.SessionToken
+import com.towmitra.driver.DutyForegroundService
+import com.towmitra.driver.NativeOwnershipCoordinator
+import com.towmitra.driver.SessionToken
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject

@@ -60,7 +60,7 @@ class FirebaseInitializationErrorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Towing Driver - Initialization Error',
+      title: 'TowMitra Driver - Initialization Error',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF121212),

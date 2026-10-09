@@ -32,7 +32,7 @@ class _DriverAppState extends State<DriverApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Towing Driver',
+      title: 'TowMitra Driver',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       locale: _locale,
