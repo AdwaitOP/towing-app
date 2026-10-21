@@ -15,6 +15,7 @@
     "test:rules": "node scripts/test-rules-integration.mjs",
     "test:smoke": "node scripts/browser-smoke-test.mjs",
     "test:auth-browser": "node scripts/auth-concurrency-browser.mjs",
+    "test:operations-browser": "node scripts/m2-operations-browser.mjs",
     "bootstrap": "node scripts/bootstrap-emulator.mjs",
     "set-claims": "node scripts/set-claims.mjs"
   },

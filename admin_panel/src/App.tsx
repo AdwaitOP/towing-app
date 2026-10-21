@@ -5,6 +5,8 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardShellPage } from '@/pages/DashboardShellPage';
+import { DriverVerificationQueuePage } from '@/pages/DriverVerificationQueuePage';
+import { LiveJobsPage } from '@/pages/LiveJobsPage';
 import { PlaceholderModulePage } from '@/pages/PlaceholderModulePage';
 
 export const App: React.FC = () => {
@@ -20,39 +22,8 @@ export const App: React.FC = () => {
             <Route element={<AdminLayout />}>
               <Route path="/" element={<DashboardShellPage />} />
 
-              <Route
-                path="/verification"
-                element={
-                  <PlaceholderModulePage
-                    title="Driver Verification Queue"
-                    milestone="Milestone 2"
-                    description="Admin review queue for pending driver KYC applications with secure in-app document viewing and audited approval/rejection."
-                    plannedFeatures={[
-                      'Realtime pending KYC application queue filtered by verificationStatus == pending',
-                      'Secure side-by-side viewing of Aadhaar ID, vehicle RC, and selfie camera captures',
-                      'adminApproveDriver Cloud Function with server-side validation and admin_actions logging',
-                      'adminRejectDriver Cloud Function requiring non-empty rejection reason and WhatsApp notification trigger',
-                    ]}
-                  />
-                }
-              />
-
-              <Route
-                path="/jobs"
-                element={
-                  <PlaceholderModulePage
-                    title="Live Jobs Monitoring"
-                    milestone="Milestone 2"
-                    description="Real-time operations monitor displaying active tow requests, assignment telemetry, and dispatch cascade progress."
-                    plannedFeatures={[
-                      'Real-time Firestore snapshot listener on jobs collection',
-                      'Filtering by job status (awaiting_payment, pending_offer, assigned, in_progress, completed, cancelled)',
-                      'Search by customer phone number, vehicle type, and job identifier',
-                      'Detailed dispatch run inspection, candidate offer history, and cancellation reason analysis',
-                    ]}
-                  />
-                }
-              />
+              <Route path="/verification" element={<DriverVerificationQueuePage />} />
+              <Route path="/jobs" element={<LiveJobsPage />} />
 
               <Route
                 path="/drivers"

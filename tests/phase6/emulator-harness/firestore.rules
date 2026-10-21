@@ -1,0 +1,198 @@
+rules_version = '2';
+
+// Firestore Security Rules — Towing Dispatch System
+//
+// Client boundary:
+//   drivers/{uid}                         own read; tightly allow-listed self-service writes
+//   jobs/{jobId}                          admin-claim read only; all client writes denied
+//   jobs/{jobId}/dispatch_runs/{runId}   admin-claim read only; all client writes denied
+//   job_offers/{offerId}                 target-driver/admin-claim read; all client writes denied
+//   wallet_entries/{operationId}         admin-claim read only; all client writes denied
+//   refund_requests/{jobId}              admin-claim read only; all client writes denied
+//   notification_outbox/{eventId}        admin-claim read only; all client writes denied
+//   pricing_config/{doc}                 authenticated read; all client writes denied
+//   dispatch_config/{doc}                admin-claim read only; all client writes denied
+//   processed/usage/session records      no client access
+//
+// Cloud Functions use the Firebase Admin SDK and bypass these rules. An admin
+// custom claim is read authorization, not permission to mutate sensitive
+// documents directly from a client. Audited backend callables own those writes.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated()
+          && 'admin' in request.auth.token
+          && request.auth.token.admin == true;
+    }
+
+    function isOwner(driverId) {
+      return isAuthenticated() && request.auth.uid == driverId;
+    }
+
+    function driverCreateAllowedFields() {
+      return ['uid', 'name', 'phone', 'truckType', 'vehicleNumber',
+              'isOnDuty', 'createdAt', 'updatedAt'].toSet();
+    }
+
+    function driverUpdateAllowedFields() {
+      return ['name', 'truckType', 'vehicleNumber', 'updatedAt'].toSet();
+    }
+
+    function isValidTruckType(type) {
+      return type in ['flatbed', 'tochan', 'hydraulic', 'crane'];
+    }
+
+    function driverCreateIsAllowListed() {
+      return request.resource.data.keys().toSet()
+               .difference(driverCreateAllowedFields()).size() == 0;
+    }
+
+    function driverCreateValidTypes(d, driverId) {
+      return d.keys().toSet().hasAll(driverCreateAllowedFields())
+          && d.uid == driverId
+          && d.uid is string
+          && d.name is string
+          && d.phone is string
+          && d.truckType is string
+          && isValidTruckType(d.truckType)
+          && d.vehicleNumber is string
+          && d.isOnDuty == false
+          && d.createdAt is timestamp
+          && d.updatedAt is timestamp;
+    }
+
+    function driverChangedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function driverUpdateIsAllowListed() {
+      return driverChangedKeys().difference(driverUpdateAllowedFields()).size() == 0;
+    }
+
+    function driverUpdateValidTypes(d) {
+      return d.uid == resource.data.uid
+          && d.uid is string
+          && d.name is string
+          && d.phone is string
+          && d.truckType is string
+          && isValidTruckType(d.truckType)
+          && d.vehicleNumber is string
+          && d.createdAt == resource.data.createdAt
+          && d.updatedAt is timestamp;
+    }
+
+    function driverUpdatedAtIsCurrent() {
+      return driverChangedKeys().hasAny(['updatedAt'])
+          && request.resource.data.updatedAt == request.time;
+    }
+
+    function driverVehicleWriteIsAllowed() {
+      return !driverChangedKeys().hasAny(['truckType', 'vehicleNumber'])
+          || !('verificationStatus' in resource.data)
+          || resource.data.verificationStatus in ['pending', 'rejected'];
+    }
+
+    match /drivers/{driverId} {
+      allow read: if isOwner(driverId) || isAdmin();
+
+      allow create: if isOwner(driverId)
+                    && driverCreateIsAllowListed()
+                    && driverCreateValidTypes(request.resource.data, driverId);
+
+      allow update: if isOwner(driverId)
+                    && driverUpdateIsAllowListed()
+                    && driverUpdateValidTypes(request.resource.data)
+                    && driverUpdatedAtIsCurrent()
+                    && driverVehicleWriteIsAllowed();
+
+      allow delete: if false;
+
+      match /activation_intents/{intentId} {
+        allow read: if isOwner(driverId) || isAdmin();
+        allow write: if false;
+      }
+    }
+
+    // Raw jobs contain customer, payment, invoice, lease, and refund data.
+    // A driver never gains raw-job access merely by being offered or assigned.
+    match /jobs/{jobId} {
+      allow read: if isAdmin();
+      allow write: if false;
+
+      match /dispatch_runs/{generationId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+
+    match /job_offers/{offerId} {
+      allow read: if isAdmin()
+                  || (isAuthenticated()
+                      && resource.data.driverId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /wallet_entries/{operationId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /wallet_topup_attempts/{topupId} {
+      allow read: if isAdmin()
+                  || (isAuthenticated() && resource.data.driverId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /refund_requests/{jobId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /notification_outbox/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /whatsapp_sessions/{phoneNumber} {
+      allow read, write: if false;
+    }
+
+    match /processed_requests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /usage_counters/{month} {
+      allow read, write: if false;
+    }
+
+    match /pricing_config/{document} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /dispatch_config/{document} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /admin_actions/{actionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /business_config/{document} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

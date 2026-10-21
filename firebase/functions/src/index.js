@@ -192,14 +192,14 @@ const { initiateWalletTopup } = require('./wallet/topupService');
 exports.initiateWalletTopup = initiateWalletTopup;
 
 
-// ── Phase 6 (placeholder) ────────────────────────────────────────────────────
-// const { adminApproveDriver } = require('./admin/approveDriver');
-// const { adminRejectDriver } = require('./admin/rejectDriver');
+// ── Phase 6 M2 Admin Decisions ──────────────────────────────────────────────
+const { adminApproveDriver } = require('./admin/approveDriver');
+const { adminRejectDriver } = require('./admin/rejectDriver');
+exports.adminApproveDriver = adminApproveDriver;
+exports.adminRejectDriver = adminRejectDriver;
 // const { adminForgiveCancellation } = require('./admin/forgiveCancellation');
 // const { adminUpdatePricingConfig } = require('./admin/updatePricingConfig');
 // const { adminCreatePhoneBooking } = require('./admin/createPhoneBooking');
-// exports.adminApproveDriver = adminApproveDriver;
-// exports.adminRejectDriver = adminRejectDriver;
 // exports.adminForgiveCancellation = adminForgiveCancellation;
 // exports.adminUpdatePricingConfig = adminUpdatePricingConfig;
 // exports.adminCreatePhoneBooking = adminCreatePhoneBooking;
